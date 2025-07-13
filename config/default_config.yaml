@@ -1,0 +1,49 @@
+# Default configuration for ETF Research Platform
+
+# Data fetching settings
+data:
+  cache_dir: "data/cache"
+  cache_ttl_hours: 24
+  max_workers: 5
+  rate_limit_delay: 0.1  # seconds between API calls
+  retry_attempts: 3
+  retry_delay: 1.0  # seconds
+
+# Portfolio settings
+portfolio:
+  default_initial_cash: 100000
+  min_position_size: 0.01  # 1% minimum position
+  max_position_size: 0.40  # 40% maximum position
+
+# Backtesting settings
+backtesting:
+  default_commission: 5.0  # per trade
+  default_slippage: 0.001  # 0.1%
+  default_rebalance_frequency: "monthly"
+  min_trade_value: 100  # minimum trade value in dollars
+
+# Analytics settings
+analytics:
+  risk_free_rate: 0.02  # 2% annual
+  periods_per_year: 252  # trading days
+  confidence_level: 0.95  # for VaR/CVaR calculations
+  monte_carlo_simulations: 10000
+
+# Optimization settings
+optimization:
+  solver_method: "SLSQP"
+  max_iterations: 1000
+  tolerance: 1e-8
+
+# Visualization settings
+visualization:
+  figure_size: [12, 8]
+  style: "seaborn"
+  dpi: 100
+  save_format: "png"
+
+# Logging settings
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/etf_platform.log"

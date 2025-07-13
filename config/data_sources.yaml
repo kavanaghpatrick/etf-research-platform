@@ -1,0 +1,117 @@
+# Data source configuration for resilient fetching
+
+# Source-specific configurations
+sources:
+  yahoo_finance:
+    enabled: true
+    priority: 1
+    rate_limit:
+      requests_per_minute: 30
+      burst_size: 5
+    retry:
+      max_attempts: 3
+      backoff_base: 2.0
+    
+  alpha_vantage:
+    enabled: true  # Requires ALPHA_VANTAGE_API_KEY env var
+    priority: 2
+    rate_limit:
+      requests_per_minute: 5  # Free tier limit
+      burst_size: 2
+    retry:
+      max_attempts: 3
+      backoff_base: 3.0
+    api_endpoint: "https://www.alphavantage.co/query"
+    
+  finnhub:
+    enabled: true  # Requires FINNHUB_API_KEY env var
+    priority: 3
+    rate_limit:
+      requests_per_minute: 60  # Free tier limit
+      burst_size: 10
+    retry:
+      max_attempts: 3
+      backoff_base: 2.0
+    api_endpoint: "https://finnhub.io/api/v1"
+    
+  tiingo:
+    enabled: true  # Requires TIINGO_API_KEY env var
+    priority: 4
+    rate_limit:
+      requests_per_minute: 300  # Generous free tier
+      burst_size: 20
+    retry:
+      max_attempts: 3
+      backoff_base: 2.0
+    api_endpoint: "https://api.tiingo.com"
+
+# Global fetching configuration
+fetching:
+  # Maximum concurrent requests
+  max_workers: 5
+  
+  # Cache configuration
+  cache:
+    ttl_hours: 24
+    max_size_mb: 1000
+    
+  # Quality checks
+  quality_check:
+    enabled: true
+    repair_data: true
+    max_missing_percent: 10  # Maximum acceptable missing data %
+    
+  # Retry configuration
+  retry:
+    max_global_retries: 5
+    exponential_backoff: true
+    jitter: true
+    
+  # Aggregation preferences
+  aggregation:
+    default_method: "best_quality"  # best_quality, average, consensus, priority
+    
+  # Performance optimization
+  batch_fetch:
+    enabled: true
+    preferred_batch_size: 10
+    
+# Source health monitoring
+health_monitoring:
+  # Persist health metrics
+  persist_health: true
+  health_file: "source_health.json"
+  
+  # Automatic source disabling
+  auto_disable:
+    enabled: true
+    failure_threshold: 10  # Consecutive failures before disabling
+    success_threshold: 3   # Successful requests to re-enable
+    
+  # Health check intervals
+  health_check_minutes: 30
+  
+# Data quality rules
+data_quality:
+  rules:
+    - name: "price_consistency"
+      description: "High >= Low, OHLC relationships"
+      enabled: true
+      
+    - name: "no_zero_prices"
+      description: "No zero or negative prices"
+      enabled: true
+      
+    - name: "volume_validation"
+      description: "Volume should be non-negative"
+      enabled: true
+      
+    - name: "date_continuity"
+      description: "Check for missing dates"
+      enabled: true
+      max_gap_days: 5
+      
+    - name: "outlier_detection"
+      description: "Detect price outliers"
+      enabled: true
+      std_threshold: 10  # Number of standard deviations
