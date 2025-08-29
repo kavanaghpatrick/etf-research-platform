@@ -6,6 +6,8 @@ Test real data fetching directly with our optimized sources.
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
 
 # Add src to path
 sys.path.insert(0, '/Users/patrickkavanagh/etf-research-platform/src')
@@ -61,9 +63,9 @@ def test_resilient_fetcher():
         from data.sources.optimized_tiingo_source import OptimizedTiingoSource
         from data.resilient_fetcher import ResilientDataFetcher
         
-        # Initialize sources
-        alpha_key = "VUVQWE4APFVTVRBD"
-        tiingo_key = "d678fd56fd40967c1c7011997c61e685961a79d3"
+        # Initialize sources from environment
+        alpha_key = os.getenv('ALPHA_VANTAGE_API_KEY', '')
+        tiingo_key = os.getenv('TIINGO_API_KEY', '')
         
         alphavantage_source = OptimizedAlphaVantageSource(api_key=alpha_key)
         tiingo_source = OptimizedTiingoSource(api_key=tiingo_key)
@@ -99,9 +101,14 @@ if __name__ == "__main__":
     print("🚀 Testing Real Data Sources")
     print("=" * 50)
     
-    # Set environment variables
-    os.environ['ALPHA_VANTAGE_API_KEY'] = "VUVQWE4APFVTVRBD"
-    os.environ['TIINGO_API_KEY'] = "d678fd56fd40967c1c7011997c61e685961a79d3"
+    # Load test environment variables
+    test_env_path = Path(__file__).parent / '.env.test'
+    if test_env_path.exists():
+        load_dotenv(test_env_path)
+        print(f"✅ Loaded test environment from {test_env_path}")
+    else:
+        print(f"⚠️ Warning: {test_env_path} not found. Using system environment variables.")
+        print("   To set up test environment, copy .env.test.example to .env.test and add your API keys.")
     
     test_alphavantage()
     test_tiingo()

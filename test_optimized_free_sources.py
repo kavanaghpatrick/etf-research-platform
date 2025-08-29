@@ -9,10 +9,16 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-# Set API keys
-os.environ['ALPHA_VANTAGE_API_KEY'] = 'VUVQWE4APFVTVRBD'
-os.environ['TIINGO_API_KEY'] = 'd678fd56fd40967c1c7011997c61e685961a79d3'
+# Load test environment variables
+test_env_path = Path(__file__).parent / '.env.test'
+if test_env_path.exists():
+    load_dotenv(test_env_path)
+    print(f"✅ Loaded test environment from {test_env_path}")
+else:
+    print(f"⚠️ Warning: {test_env_path} not found. Using system environment variables.")
+    print("   To set up test environment, copy .env.test.example to .env.test and add your API keys.")
 
 # Add paths
 current_dir = Path(__file__).parent
