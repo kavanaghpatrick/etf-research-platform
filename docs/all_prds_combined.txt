@@ -1,0 +1,3664 @@
+# PRD: Async Architecture Conversion
+
+## 1. Executive Summary
+
+This document outlines the conversion of the ETF Research Platform API from a synchronous to an asynchronous architecture. The primary goal is to improve performance, reduce response times, and better handle concurrent requests while maintaining backward compatibility.
+
+### Key Benefits
+- **3-5x performance improvement** for multi-ticker requests
+- **Reduced serverless timeout risks** on Vercel (10s timeout)
+- **Better resource utilization** through non-blocking I/O
+- **Improved scalability** for handling multiple concurrent users
+
+### Risk Assessment
+- **Low Risk**: Existing API contracts remain unchanged
+- **Medium Complexity**: Requires careful handling of database connections
+- **High Impact**: Significant performance improvements expected
+
+## 2. Problem Statement
+
+### Current Synchronous Blocking Issues
+1. **Sequential API Calls**: When fetching data for multiple tickers, each external API call blocks the thread
+2. **Database Bottlenecks**: SQLite operations block during cache reads/writes
+3. **Poor Concurrency**: Cannot efficiently handle multiple simultaneous requests
+4. **Timeout Risks**: Long-running operations risk hitting Vercel's 10-second timeout
+
+### Performance Bottlenecks in Request Handling
+- `/data/fetch` endpoint processes tickers sequentially
+- Dividend calculations block while fetching historical data
+- Cache operations cannot be parallelized effectively
+- External API rate limiting causes unnecessary blocking
+
+### Serverless Timeout Constraints
+- Vercel Functions have a 10-second timeout on the Hobby plan
+- Current implementation risks timeout when fetching 5+ tickers
+- No ability to stream partial results
+
+## 3. Goals & Success Metrics
+
+### Specific Performance Targets
+- **Response Time**: Reduce multi-ticker fetch time by 60-70%
+- **Concurrency**: Handle 10x more concurrent requests
+- **Timeout Prevention**: Ensure 99% of requests complete within 8 seconds
+- **Cache Efficiency**: Parallel cache lookups reduce overhead by 50%
+
+### Measurable Outcomes
+- Average response time for 10-ticker request: <3 seconds (from ~8 seconds)
+- P95 latency: <5 seconds
+- Concurrent request capacity: 100+ (from ~10)
+- API timeout rate: <1% (from ~5%)
+
+### Timeline Expectations
+- Phase 1 (Core Conversion): 2 days
+- Phase 2 (Data Fetcher): 1 day
+- Phase 3 (Database): 1 day
+- Phase 4 (Testing): 1 day
+- **Total**: 5 days
+
+## 4. Technical Requirements
+
+### Convert all endpoints from `def` to `async def`
+All FastAPI endpoints must be converted to async functions:
+```python
+# Before
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+# After
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+```
+
+### Implement `asyncio.gather()` for concurrent operations
+Parallelize independent operations:
+```python
+# Fetch multiple tickers concurrently
+results = await asyncio.gather(
+    *[fetch_ticker_data(ticker) for ticker in tickers],
+    return_exceptions=True
+)
+```
+
+### Use `asyncio.to_thread()` for blocking I/O
+Wrap synchronous operations that cannot be made async:
+```python
+# Database operations
+result = await asyncio.to_thread(
+    cache_manager.get_cached_data,
+    ticker, start_date, end_date
+)
+```
+
+### Maintain backward compatibility
+- All API endpoints maintain the same URL structure
+- Response formats remain unchanged
+- Error handling patterns preserved
+
+## 5. Implementation Plan
+
+### Phase 1: Core endpoint conversion (Priority: High)
+1. Convert all FastAPI route handlers to async
+2. Update simple endpoints first (health, root, status)
+3. Implement async wrapper for synchronous data fetcher
+4. Add proper error handling for async operations
+
+### Phase 2: Data fetcher async methods (Priority: High)
+1. Create `AsyncCachedDataFetcher` class
+2. Implement concurrent ticker fetching with `asyncio.gather()`
+3. Add async cache lookup methods
+4. Implement parallel API calls with rate limiting
+
+### Phase 3: Database operations (Priority: Medium)
+1. Add async wrappers for SQLite operations using `asyncio.to_thread()`
+2. Implement connection pooling for PostgreSQL (if used)
+3. Create async cache manager interface
+4. Add concurrent cache writes with proper locking
+
+### Phase 4: Testing and validation (Priority: High)
+1. Unit tests for all async endpoints
+2. Integration tests for concurrent operations
+3. Performance benchmarking suite
+4. Load testing with multiple concurrent requests
+
+## 6. Code Examples
+
+### Before/after code snippets
+
+#### Endpoint Conversion
+```python
+# BEFORE: Synchronous endpoint
+@app.post("/data/fetch")
+def fetch_ticker_data(request: DataFetchRequest):
+    results = fetch_real_data(request.tickers, request.start_date, request.end_date)
+    return {"status": "success", "data": results}
+
+# AFTER: Asynchronous endpoint
+@app.post("/data/fetch")
+async def fetch_ticker_data(request: DataFetchRequest):
+    results = await fetch_real_data(request.tickers, request.start_date, request.end_date)
+    return {"status": "success", "data": results}
+```
+
+#### Multiple Ticker Fetching
+```python
+# BEFORE: Sequential processing
+for ticker in tickers:
+    result = self.fetch_ticker_data(ticker, start_date, end_date)
+    results.append(result)
+
+# AFTER: Concurrent processing
+tasks = [self.fetch_ticker_data(ticker, start_date, end_date) for ticker in tickers]
+results = await asyncio.gather(*tasks, return_exceptions=True)
+```
+
+### Key async patterns to implement
+
+#### Async Context Manager for Database
+```python
+class AsyncCacheManager:
+    async def __aenter__(self):
+        self.conn = await asyncio.to_thread(self._get_connection)
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await asyncio.to_thread(self.conn.close)
+```
+
+#### Rate-Limited Async API Calls
+```python
+class AsyncRateLimiter:
+    def __init__(self, rate: int, per: float):
+        self.rate = rate
+        self.per = per
+        self.allowance = rate
+        self.last_check = time.monotonic()
+        self._lock = asyncio.Lock()
+    
+    async def acquire(self):
+        async with self._lock:
+            current = time.monotonic()
+            time_passed = current - self.last_check
+            self.last_check = current
+            self.allowance += time_passed * (self.rate / self.per)
+            if self.allowance > self.rate:
+                self.allowance = self.rate
+            if self.allowance < 1.0:
+                sleep_time = (1.0 - self.allowance) * (self.per / self.rate)
+                await asyncio.sleep(sleep_time)
+                self.allowance = 0.0
+            else:
+                self.allowance -= 1.0
+```
+
+### Error handling strategies
+
+#### Async Exception Handling
+```python
+async def fetch_with_fallback(ticker: str, sources: List[DataSource]):
+    for source in sources:
+        try:
+            return await source.fetch_async(ticker)
+        except Exception as e:
+            logger.warning(f"{source.name} failed for {ticker}: {e}")
+            continue
+    raise HTTPException(status_code=503, detail=f"All sources failed for {ticker}")
+```
+
+#### Timeout Protection
+```python
+async def fetch_with_timeout(ticker: str, timeout: float = 5.0):
+    try:
+        return await asyncio.wait_for(
+            fetch_ticker_data(ticker),
+            timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout fetching {ticker}")
+        return None
+```
+
+## 7. Dependencies & Risks
+
+### Required library updates
+- FastAPI: Already supports async (no update needed)
+- SQLite: Use `aiosqlite` for async support
+- PostgreSQL: Use `asyncpg` for async support
+- HTTP Clients: Use `httpx` for async HTTP requests
+
+### Potential breaking changes
+- Database connection handling must be refactored
+- Third-party API clients may need async versions
+- Some synchronous libraries have no async alternatives
+
+### Mitigation strategies
+1. **Gradual Migration**: Convert endpoints incrementally
+2. **Feature Flags**: Toggle between sync/async implementations
+3. **Fallback Mechanisms**: Keep sync versions as fallback
+4. **Thorough Testing**: Comprehensive test suite before deployment
+
+## 8. Testing Strategy
+
+### Unit test requirements
+- Test each async endpoint individually
+- Mock external API calls with async fixtures
+- Test timeout handling and cancellation
+- Verify error propagation in async context
+
+### Integration testing approach
+```python
+@pytest.mark.asyncio
+async def test_concurrent_ticker_fetch():
+    tickers = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]
+    start_time = time.time()
+    
+    results = await fetch_multiple_tickers_async(tickers)
+    
+    elapsed = time.time() - start_time
+    assert elapsed < 3.0  # Should complete in under 3 seconds
+    assert len(results) == 5
+```
+
+### Performance benchmarking
+```python
+# Benchmark script
+async def benchmark_async_performance():
+    scenarios = [
+        {"name": "Single ticker", "tickers": ["AAPL"]},
+        {"name": "5 tickers", "tickers": ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]},
+        {"name": "10 tickers", "tickers": [...]}  # 10 tickers
+    ]
+    
+    for scenario in scenarios:
+        # Test sync version
+        sync_time = measure_sync_performance(scenario["tickers"])
+        
+        # Test async version
+        async_time = await measure_async_performance(scenario["tickers"])
+        
+        improvement = (sync_time - async_time) / sync_time * 100
+        print(f"{scenario['name']}: {improvement:.1f}% improvement")
+```
+
+## 9. Rollout Plan
+
+### Deployment strategy
+1. **Development Environment**: Full async implementation
+2. **Staging Deployment**: A/B testing with 10% traffic
+3. **Production Canary**: 25% → 50% → 100% over 48 hours
+4. **Monitoring**: Real-time performance metrics
+
+### Feature flags/gradual rollout
+```python
+# Environment variable control
+ASYNC_MODE = os.getenv("ENABLE_ASYNC_MODE", "false").lower() == "true"
+
+@app.post("/data/fetch")
+async def fetch_ticker_data(request: DataFetchRequest):
+    if ASYNC_MODE:
+        return await fetch_ticker_data_async(request)
+    else:
+        return await asyncio.to_thread(fetch_ticker_data_sync, request)
+```
+
+### Rollback procedures
+1. **Immediate Rollback**: Toggle `ENABLE_ASYNC_MODE=false`
+2. **Code Rollback**: Previous version tagged and ready
+3. **Database Rollback**: No schema changes, safe to revert
+4. **Monitoring Alerts**: Automatic rollback on error rate spike
+
+### Success Criteria for Full Rollout
+- Error rate remains below 0.1%
+- P95 latency improved by >50%
+- No increase in timeout errors
+- Positive performance metrics for 48 hours
+
+## Appendix: Technical Considerations
+
+### Connection Pooling
+```python
+# Async connection pool for PostgreSQL
+async def create_pool():
+    return await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=10,
+        max_size=20,
+        command_timeout=60
+    )
+```
+
+### Async Cache Implementation
+```python
+class AsyncCache:
+    def __init__(self, backend):
+        self.backend = backend
+        self._lock = asyncio.Lock()
+    
+    async def get(self, key: str) -> Optional[Any]:
+        async with self._lock:
+            return await asyncio.to_thread(self.backend.get, key)
+    
+    async def set(self, key: str, value: Any, ttl: int = 3600):
+        async with self._lock:
+            await asyncio.to_thread(self.backend.set, key, value, ttl)
+```
+
+### Monitoring and Observability
+- Add async-aware APM (Application Performance Monitoring)
+- Track concurrent request counts
+- Monitor event loop lag
+- Log slow async operations
+
+This PRD provides a comprehensive roadmap for converting the ETF Research Platform API to an async architecture while maintaining reliability and backward compatibility.# PRD: Database Optimization for Serverless
+
+## 1. Executive Summary
+
+### Database Optimization Objectives
+- Migrate from SQLite to PostgreSQL for production serverless deployment
+- Eliminate connection overhead and cold start latency through connection pooling
+- Optimize time-series query performance for financial data
+- Support high concurrency (1000+ simultaneous requests)
+- Implement efficient batch operations for bulk data ingestion
+
+### Expected Performance Gains
+- **Query Response Time**: From 200-500ms to sub-100ms for typical queries
+- **Connection Overhead**: 90% reduction through persistent connection pooling
+- **Concurrent Requests**: From ~10 to 1000+ simultaneous connections
+- **Batch Insert Performance**: 10x improvement through optimized bulk operations
+- **Cold Start Impact**: Reduced from 2-3s to <500ms
+
+### Infrastructure Changes Required
+- PostgreSQL 15+ with TimescaleDB extension
+- AWS RDS Proxy or PgBouncer for connection pooling
+- Dedicated read replicas for analytics queries
+- Automated backup and point-in-time recovery
+- CloudWatch metrics and performance monitoring
+
+## 2. Problem Statement
+
+### Current Architecture Limitations
+
+#### SQLite Concurrency Issues
+- Single-writer limitation causes request queuing
+- File-based locking leads to timeout errors under load
+- No support for concurrent write operations
+- Thread-based locking (`threading.Lock`) creates bottlenecks
+
+#### Connection Management Problems
+- No connection pooling in serverless environment
+- Each Lambda invocation creates new database connection
+- Connection overhead of 100-300ms per request
+- Database connections exhausted during traffic spikes
+- SQLite reopens file handle for each operation
+
+#### Inefficient Operations
+- Individual INSERT statements for bulk data
+- No batch optimization for time-series data
+- Lack of proper indexing for date-range queries
+- Full table scans for ticker + date combinations
+- No query result caching
+
+#### Cold Start Overhead
+- Database schema validation on every Lambda start
+- Connection initialization adds 1-2 seconds
+- No connection reuse between invocations
+- Schema creation checks run repeatedly
+
+## 3. Goals & Success Metrics
+
+### Performance Goals
+- **P50 Query Latency**: < 50ms
+- **P99 Query Latency**: < 100ms
+- **Connection Overhead**: < 10ms with pooling
+- **Concurrent Connections**: Support 1000+ simultaneous
+- **Batch Insert Rate**: > 10,000 records/second
+- **Cache Hit Rate**: > 80% for recent data
+
+### Reliability Goals
+- **Zero Database Timeouts**: Eliminate connection exhaustion
+- **99.99% Uptime**: High availability configuration
+- **Data Consistency**: ACID compliance maintained
+- **Automatic Failover**: < 30 seconds RTO
+- **Point-in-Time Recovery**: 5-minute RPO
+
+### Scalability Goals
+- **Horizontal Read Scaling**: Via read replicas
+- **Storage Growth**: Support 100TB+ of time-series data
+- **Query Performance**: Maintain sub-100ms at scale
+- **Connection Pool Size**: Auto-scaling based on load
+
+### Cost Optimization Goals
+- **Connection Efficiency**: 95% connection reuse
+- **Query Cost**: < $0.001 per request
+- **Storage Cost**: < $100/TB/month with compression
+- **Compute Optimization**: Right-sized instances
+
+## 4. Technical Requirements
+
+### Database Migration Requirements
+- **PostgreSQL 15+**: Latest stable version
+- **TimescaleDB Extension**: For time-series optimization
+- **Connection Pooling**: RDS Proxy or PgBouncer
+- **High Availability**: Multi-AZ deployment
+- **Automated Backups**: Daily with 30-day retention
+
+### Query Optimization Requirements
+- **Composite Indexes**: (ticker_symbol, date)
+- **Partial Indexes**: For active tickers
+- **Materialized Views**: For aggregate calculations
+- **Query Plan Caching**: Prepared statements
+- **Result Caching**: Redis for hot data
+
+### Batch Operation Requirements
+- **Bulk COPY**: PostgreSQL native bulk loading
+- **Transaction Batching**: 1000-record chunks
+- **Parallel Processing**: Multi-threaded ingestion
+- **Conflict Resolution**: UPSERT operations
+- **Progress Tracking**: Batch job monitoring
+
+### Connection Management Requirements
+- **Connection Pool Size**: 25-100 connections
+- **Pool Timeout**: 30 seconds
+- **Idle Timeout**: 300 seconds
+- **Health Checks**: Every 30 seconds
+- **Circuit Breaker**: Automatic failover
+
+### Data Retention Requirements
+- **Hot Data**: Last 2 years in primary tables
+- **Warm Data**: 2-5 years in compressed format
+- **Cold Data**: 5+ years in S3 archive
+- **Automated Archival**: Monthly process
+- **Compliance**: 7-year retention policy
+
+## 5. Implementation Plan
+
+### Phase 1: PostgreSQL Migration (Week 1-2)
+1. **Database Setup**
+   - Provision RDS PostgreSQL instance
+   - Install TimescaleDB extension
+   - Configure security groups and VPC
+   - Set up parameter groups
+
+2. **Schema Migration**
+   - Convert SQLite schema to PostgreSQL
+   - Add TimescaleDB hypertables
+   - Create optimized indexes
+   - Set up partitioning
+
+3. **Data Migration**
+   - Export SQLite data to CSV
+   - Bulk load into PostgreSQL
+   - Validate data integrity
+   - Performance benchmarking
+
+### Phase 2: Connection Proxy Setup (Week 3)
+1. **RDS Proxy Configuration**
+   - Create RDS Proxy instance
+   - Configure connection pooling
+   - Set up IAM authentication
+   - Lambda VPC configuration
+
+2. **Connection Testing**
+   - Load testing with concurrent connections
+   - Monitor pool utilization
+   - Tune pool parameters
+   - Implement retry logic
+
+### Phase 3: Query Optimization (Week 4-5)
+1. **Index Strategy**
+   - Analyze query patterns
+   - Create composite indexes
+   - Implement partial indexes
+   - Monitor index usage
+
+2. **Query Refactoring**
+   - Convert to prepared statements
+   - Implement query batching
+   - Add query hints
+   - Result set pagination
+
+### Phase 4: Batch Operation Refactoring (Week 6)
+1. **Bulk Operations**
+   - Implement COPY operations
+   - Add transaction batching
+   - Parallel processing
+   - Error handling
+
+2. **Performance Testing**
+   - Benchmark bulk inserts
+   - Stress test with large datasets
+   - Monitor resource usage
+   - Optimize batch sizes
+
+## 6. Database Schema Design
+
+### Optimized Table Structures
+
+```sql
+-- Enable TimescaleDB extension
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+-- Optimized tickers table with metadata
+CREATE TABLE tickers (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(255),
+    exchange VARCHAR(50),
+    sector VARCHAR(100),
+    industry VARCHAR(100),
+    market_cap BIGINT,
+    is_active BOOLEAN DEFAULT TRUE,
+    total_records INTEGER DEFAULT 0,
+    first_cached_date DATE,
+    last_cached_date DATE,
+    last_updated TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Main time-series table as TimescaleDB hypertable
+CREATE TABLE stock_data (
+    ticker_symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    open DECIMAL(12,4) NOT NULL,
+    high DECIMAL(12,4) NOT NULL,
+    low DECIMAL(12,4) NOT NULL,
+    close DECIMAL(12,4) NOT NULL,
+    volume BIGINT NOT NULL,
+    adj_close DECIMAL(12,4) NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (ticker_symbol, date)
+);
+
+-- Convert to hypertable for time-series optimization
+SELECT create_hypertable('stock_data', 'date', 
+    chunk_time_interval => INTERVAL '1 month',
+    if_not_exists => TRUE
+);
+
+-- Enable compression for older data
+ALTER TABLE stock_data SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'ticker_symbol',
+    timescaledb.compress_orderby = 'date DESC'
+);
+
+-- Dividend data table
+CREATE TABLE dividend_data (
+    ticker_symbol VARCHAR(10) NOT NULL,
+    ex_date DATE NOT NULL,
+    payment_date DATE,
+    record_date DATE,
+    declaration_date DATE,
+    amount DECIMAL(10,4) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+    frequency VARCHAR(20),
+    type VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (ticker_symbol, ex_date)
+);
+
+-- Cache metadata table
+CREATE TABLE cache_metadata (
+    id SERIAL PRIMARY KEY,
+    ticker_symbol VARCHAR(10) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    record_count INTEGER NOT NULL,
+    fetch_duration_ms INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    INDEX idx_cache_lookup (ticker_symbol, start_date, end_date)
+);
+
+-- API usage tracking
+CREATE TABLE api_usage (
+    id SERIAL PRIMARY KEY,
+    source VARCHAR(50) NOT NULL,
+    endpoint VARCHAR(255),
+    ticker_symbol VARCHAR(10),
+    request_timestamp TIMESTAMPTZ DEFAULT NOW(),
+    response_status INTEGER,
+    response_time_ms INTEGER,
+    records_returned INTEGER DEFAULT 0,
+    error_message TEXT,
+    INDEX idx_api_usage_timestamp (request_timestamp)
+);
+```
+
+### Indexing Strategy
+
+```sql
+-- Primary lookup index (most common query pattern)
+CREATE INDEX idx_stock_data_lookup ON stock_data (ticker_symbol, date DESC);
+
+-- Date range queries
+CREATE INDEX idx_stock_data_date ON stock_data (date DESC);
+
+-- Source-specific queries
+CREATE INDEX idx_stock_data_source ON stock_data (source, ticker_symbol);
+
+-- Partial index for active tickers (last 30 days)
+CREATE INDEX idx_stock_data_active ON stock_data (ticker_symbol, date DESC)
+WHERE date >= CURRENT_DATE - INTERVAL '30 days';
+
+-- Covering index for common queries
+CREATE INDEX idx_stock_data_covering ON stock_data 
+(ticker_symbol, date DESC) 
+INCLUDE (open, high, low, close, volume, adj_close);
+
+-- Dividend lookup indexes
+CREATE INDEX idx_dividend_ticker_date ON dividend_data (ticker_symbol, ex_date DESC);
+CREATE INDEX idx_dividend_payment ON dividend_data (payment_date) 
+WHERE payment_date IS NOT NULL;
+
+-- Cache metadata indexes
+CREATE INDEX idx_cache_ticker ON cache_metadata (ticker_symbol);
+CREATE INDEX idx_cache_created ON cache_metadata (created_at DESC);
+```
+
+### Partitioning Strategy
+
+```sql
+-- Automatic partitioning by TimescaleDB (monthly chunks)
+-- Additional manual partitioning for archive data
+
+-- Create archive schema
+CREATE SCHEMA IF NOT EXISTS archive;
+
+-- Archive table for data older than 2 years
+CREATE TABLE archive.stock_data_archive (
+    LIKE stock_data INCLUDING ALL
+) PARTITION BY RANGE (date);
+
+-- Create yearly partitions
+CREATE TABLE archive.stock_data_2020 PARTITION OF archive.stock_data_archive
+    FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');
+
+CREATE TABLE archive.stock_data_2021 PARTITION OF archive.stock_data_archive
+    FOR VALUES FROM ('2021-01-01') TO ('2022-01-01');
+
+-- Automated archival function
+CREATE OR REPLACE FUNCTION archive_old_data() RETURNS void AS $$
+BEGIN
+    -- Move data older than 2 years to archive
+    INSERT INTO archive.stock_data_archive
+    SELECT * FROM stock_data 
+    WHERE date < CURRENT_DATE - INTERVAL '2 years';
+    
+    -- Delete archived data from main table
+    DELETE FROM stock_data 
+    WHERE date < CURRENT_DATE - INTERVAL '2 years';
+    
+    -- Compress archived chunks
+    PERFORM compress_chunk(c.chunk_name) 
+    FROM timescaledb_information.chunks c
+    WHERE c.hypertable_name = 'stock_data_archive'
+    AND c.range_end < CURRENT_DATE - INTERVAL '2 years';
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Data Retention Policies
+
+```sql
+-- Compression policy for data older than 3 months
+SELECT add_compression_policy('stock_data', 
+    compress_after => INTERVAL '3 months',
+    if_not_exists => TRUE
+);
+
+-- Retention policy for API usage logs
+SELECT add_retention_policy('api_usage', 
+    drop_after => INTERVAL '90 days',
+    if_not_exists => TRUE
+);
+
+-- Continuous aggregates for common queries
+CREATE MATERIALIZED VIEW daily_price_stats
+WITH (timescaledb.continuous) AS
+SELECT 
+    ticker_symbol,
+    time_bucket('1 day', date) AS day,
+    AVG(close) as avg_close,
+    MAX(high) as day_high,
+    MIN(low) as day_low,
+    SUM(volume) as total_volume
+FROM stock_data
+GROUP BY ticker_symbol, day
+WITH NO DATA;
+
+-- Refresh policy for continuous aggregates
+SELECT add_continuous_aggregate_policy('daily_price_stats',
+    start_offset => INTERVAL '3 days',
+    end_offset => INTERVAL '1 hour',
+    schedule_interval => INTERVAL '1 hour',
+    if_not_exists => TRUE
+);
+```
+
+## 7. Code Examples
+
+### Connection Pool Configuration
+
+```python
+import os
+import asyncpg
+from contextlib import asynccontextmanager
+from typing import Optional
+import boto3
+from aws_xray_sdk.core import xray_recorder
+
+class OptimizedDatabasePool:
+    """
+    Serverless-optimized database connection pool with RDS Proxy support.
+    """
+    
+    def __init__(self):
+        self.pool: Optional[asyncpg.Pool] = None
+        self.rds_proxy_endpoint = os.getenv('RDS_PROXY_ENDPOINT')
+        self.database_url = self._get_database_url()
+        
+    def _get_database_url(self) -> str:
+        """Construct database URL with RDS Proxy endpoint."""
+        if self.rds_proxy_endpoint:
+            # Use RDS Proxy for connection pooling
+            return (
+                f"postgresql://{os.getenv('DB_USER')}:"
+                f"{os.getenv('DB_PASSWORD')}@"
+                f"{self.rds_proxy_endpoint}:5432/"
+                f"{os.getenv('DB_NAME')}?"
+                f"sslmode=require&"
+                f"application_name=etf-platform&"
+                f"statement_timeout=30000"
+            )
+        else:
+            # Direct connection (development)
+            return os.getenv('DATABASE_URL')
+    
+    async def initialize(self):
+        """Initialize connection pool with optimized settings."""
+        if not self.pool:
+            self.pool = await asyncpg.create_pool(
+                self.database_url,
+                min_size=5,           # Minimum connections
+                max_size=20,          # Maximum connections
+                max_queries=1000,     # Queries per connection before reset
+                max_inactive_connection_lifetime=300,  # 5 minutes
+                command_timeout=30,   # 30 second timeout
+                init=self._init_connection
+            )
+    
+    async def _init_connection(self, conn):
+        """Initialize each connection with optimal settings."""
+        # Set connection parameters
+        await conn.execute("SET jit = 'off'")  # Disable JIT for serverless
+        await conn.execute("SET statement_timeout = '30s'")
+        await conn.execute("SET lock_timeout = '10s'")
+        await conn.execute("SET idle_in_transaction_session_timeout = '60s'")
+        
+        # Prepare common statements
+        await conn.prepare("""
+            SELECT date, open, high, low, close, volume, adj_close, source
+            FROM stock_data 
+            WHERE ticker_symbol = $1 AND date >= $2 AND date <= $3
+            ORDER BY date ASC
+        """)
+    
+    @asynccontextmanager
+    async def acquire(self):
+        """Acquire connection from pool with monitoring."""
+        if not self.pool:
+            await self.initialize()
+        
+        with xray_recorder.in_subsegment('db_connection'):
+            async with self.pool.acquire() as conn:
+                yield conn
+    
+    async def close(self):
+        """Close connection pool."""
+        if self.pool:
+            await self.pool.close()
+
+# Global pool instance for Lambda reuse
+db_pool = OptimizedDatabasePool()
+```
+
+### Batch Insert Operations
+
+```python
+import asyncpg
+import pandas as pd
+from typing import List, Tuple
+import logging
+
+class BatchDataIngestion:
+    """
+    Optimized batch data ingestion with conflict resolution.
+    """
+    
+    def __init__(self, db_pool: OptimizedDatabasePool):
+        self.db_pool = db_pool
+        self.logger = logging.getLogger(__name__)
+        self.batch_size = 1000
+    
+    async def bulk_insert_stock_data(
+        self, 
+        ticker: str, 
+        data: pd.DataFrame, 
+        source: str
+    ) -> int:
+        """
+        Bulk insert stock data using COPY command for maximum performance.
+        """
+        if data.empty:
+            return 0
+        
+        async with self.db_pool.acquire() as conn:
+            # Create temporary table for staging
+            temp_table = f"temp_stock_data_{ticker}_{source}".lower()
+            
+            try:
+                # Create temporary staging table
+                await conn.execute(f"""
+                    CREATE TEMP TABLE {temp_table} (
+                        ticker_symbol VARCHAR(10),
+                        date DATE,
+                        open DECIMAL(12,4),
+                        high DECIMAL(12,4),
+                        low DECIMAL(12,4),
+                        close DECIMAL(12,4),
+                        volume BIGINT,
+                        adj_close DECIMAL(12,4),
+                        source VARCHAR(50)
+                    )
+                """)
+                
+                # Prepare data for COPY
+                records = []
+                for idx, row in data.iterrows():
+                    records.append((
+                        ticker,
+                        idx.date(),
+                        float(row['Open']),
+                        float(row['High']),
+                        float(row['Low']),
+                        float(row['Close']),
+                        int(row['Volume']),
+                        float(row['Adj Close']),
+                        source
+                    ))
+                
+                # Use COPY for bulk insert into temp table
+                await conn.copy_records_to_table(
+                    temp_table, 
+                    records=records,
+                    columns=['ticker_symbol', 'date', 'open', 'high', 
+                            'low', 'close', 'volume', 'adj_close', 'source']
+                )
+                
+                # Merge from temp table with conflict resolution
+                result = await conn.execute(f"""
+                    INSERT INTO stock_data 
+                    SELECT * FROM {temp_table}
+                    ON CONFLICT (ticker_symbol, date) DO UPDATE SET
+                        open = EXCLUDED.open,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        close = EXCLUDED.close,
+                        volume = EXCLUDED.volume,
+                        adj_close = EXCLUDED.adj_close,
+                        source = EXCLUDED.source,
+                        created_at = NOW()
+                    RETURNING 1
+                """)
+                
+                rows_affected = len(result)
+                
+                # Update ticker metadata
+                await self._update_ticker_metadata(conn, ticker)
+                
+                # Record cache metadata
+                await self._record_cache_metadata(
+                    conn, ticker, data, source, rows_affected
+                )
+                
+                self.logger.info(
+                    f"Bulk inserted {rows_affected} records for {ticker}"
+                )
+                return rows_affected
+                
+            except Exception as e:
+                self.logger.error(f"Bulk insert failed for {ticker}: {e}")
+                raise
+            finally:
+                # Temp table is automatically dropped
+                pass
+    
+    async def _update_ticker_metadata(self, conn: asyncpg.Connection, ticker: str):
+        """Update ticker statistics after bulk insert."""
+        await conn.execute("""
+            INSERT INTO tickers (symbol)
+            VALUES ($1)
+            ON CONFLICT (symbol) DO UPDATE SET
+                total_records = (
+                    SELECT COUNT(*) FROM stock_data 
+                    WHERE ticker_symbol = $1
+                ),
+                first_cached_date = (
+                    SELECT MIN(date) FROM stock_data 
+                    WHERE ticker_symbol = $1
+                ),
+                last_cached_date = (
+                    SELECT MAX(date) FROM stock_data 
+                    WHERE ticker_symbol = $1
+                ),
+                last_updated = NOW()
+        """, ticker)
+    
+    async def _record_cache_metadata(
+        self, 
+        conn: asyncpg.Connection,
+        ticker: str,
+        data: pd.DataFrame,
+        source: str,
+        record_count: int
+    ):
+        """Record cache metadata for monitoring."""
+        start_date = data.index.min().date()
+        end_date = data.index.max().date()
+        
+        await conn.execute("""
+            INSERT INTO cache_metadata 
+            (ticker_symbol, start_date, end_date, source, record_count)
+            VALUES ($1, $2, $3, $4, $5)
+        """, ticker, start_date, end_date, source, record_count)
+```
+
+### Optimized Query Patterns
+
+```python
+from typing import List, Dict, Any, Optional
+from datetime import date, datetime
+import asyncpg
+
+class OptimizedQueries:
+    """
+    Optimized query patterns for time-series data retrieval.
+    """
+    
+    def __init__(self, db_pool: OptimizedDatabasePool):
+        self.db_pool = db_pool
+        self._prepared_statements = {}
+    
+    async def get_price_data(
+        self, 
+        ticker: str, 
+        start_date: date, 
+        end_date: date,
+        columns: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve price data with optimized query and column selection.
+        """
+        async with self.db_pool.acquire() as conn:
+            # Use prepared statement for better performance
+            if 'price_data' not in self._prepared_statements:
+                self._prepared_statements['price_data'] = await conn.prepare("""
+                    SELECT date, open, high, low, close, volume, adj_close, source
+                    FROM stock_data 
+                    WHERE ticker_symbol = $1 
+                    AND date >= $2 
+                    AND date <= $3
+                    ORDER BY date ASC
+                """)
+            
+            stmt = self._prepared_statements['price_data']
+            rows = await stmt.fetch(ticker, start_date, end_date)
+            
+            # Convert to dictionaries
+            return [dict(row) for row in rows]
+    
+    async def get_latest_prices(
+        self, 
+        tickers: List[str], 
+        limit: int = 1
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get latest prices for multiple tickers in a single query.
+        """
+        async with self.db_pool.acquire() as conn:
+            # Use window function for efficient multi-ticker query
+            rows = await conn.fetch("""
+                WITH latest_prices AS (
+                    SELECT 
+                        ticker_symbol,
+                        date,
+                        close,
+                        volume,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ticker_symbol 
+                            ORDER BY date DESC
+                        ) as rn
+                    FROM stock_data
+                    WHERE ticker_symbol = ANY($1::text[])
+                )
+                SELECT ticker_symbol, date, close, volume
+                FROM latest_prices
+                WHERE rn <= $2
+                ORDER BY ticker_symbol, date DESC
+            """, tickers, limit)
+            
+            # Group by ticker
+            result = {}
+            for row in rows:
+                ticker = row['ticker_symbol']
+                if ticker not in result:
+                    result[ticker] = []
+                result[ticker].append(dict(row))
+            
+            return result
+    
+    async def get_missing_date_ranges(
+        self, 
+        ticker: str, 
+        start_date: date, 
+        end_date: date
+    ) -> List[Tuple[date, date]]:
+        """
+        Efficiently identify missing date ranges using gaps detection.
+        """
+        async with self.db_pool.acquire() as conn:
+            # Use window functions to detect gaps
+            rows = await conn.fetch("""
+                WITH date_gaps AS (
+                    SELECT 
+                        date,
+                        LAG(date) OVER (ORDER BY date) as prev_date
+                    FROM stock_data
+                    WHERE ticker_symbol = $1
+                    AND date >= $2
+                    AND date <= $3
+                ),
+                gaps AS (
+                    SELECT 
+                        prev_date + INTERVAL '1 day' as gap_start,
+                        date - INTERVAL '1 day' as gap_end
+                    FROM date_gaps
+                    WHERE date - prev_date > 1
+                    AND prev_date IS NOT NULL
+                )
+                SELECT gap_start::date, gap_end::date
+                FROM gaps
+                WHERE gap_end >= gap_start
+                ORDER BY gap_start
+            """, ticker, start_date, end_date)
+            
+            return [(row['gap_start'], row['gap_end']) for row in rows]
+    
+    async def get_aggregate_stats(
+        self, 
+        ticker: str, 
+        period: str = '1 month'
+    ) -> List[Dict[str, Any]]:
+        """
+        Get aggregate statistics using continuous aggregates.
+        """
+        async with self.db_pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT 
+                    time_bucket($2::interval, date) as period,
+                    ticker_symbol,
+                    COUNT(*) as data_points,
+                    AVG(close) as avg_close,
+                    MAX(high) as period_high,
+                    MIN(low) as period_low,
+                    SUM(volume) as total_volume,
+                    STDDEV(close) as volatility
+                FROM stock_data
+                WHERE ticker_symbol = $1
+                AND date >= CURRENT_DATE - INTERVAL '1 year'
+                GROUP BY period, ticker_symbol
+                ORDER BY period DESC
+            """, ticker, period)
+            
+            return [dict(row) for row in rows]
+```
+
+### Transaction Management
+
+```python
+import asyncpg
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+class TransactionManager:
+    """
+    Advanced transaction management with savepoints and retry logic.
+    """
+    
+    def __init__(self, db_pool: OptimizedDatabasePool):
+        self.db_pool = db_pool
+        self.max_retries = 3
+        self.retry_delays = [0.1, 0.5, 1.0]
+    
+    @asynccontextmanager
+    async def transaction(
+        self, 
+        isolation_level: str = 'read_committed'
+    ) -> AsyncGenerator[asyncpg.Connection, None]:
+        """
+        Create a transaction with specified isolation level.
+        """
+        async with self.db_pool.acquire() as conn:
+            async with conn.transaction(isolation=isolation_level):
+                yield conn
+    
+    @asynccontextmanager
+    async def savepoint(
+        self, 
+        conn: asyncpg.Connection, 
+        name: str
+    ) -> AsyncGenerator[None, None]:
+        """
+        Create a savepoint for partial rollback capability.
+        """
+        await conn.execute(f'SAVEPOINT {name}')
+        try:
+            yield
+        except Exception:
+            await conn.execute(f'ROLLBACK TO SAVEPOINT {name}')
+            raise
+        else:
+            await conn.execute(f'RELEASE SAVEPOINT {name}')
+    
+    async def execute_with_retry(
+        self, 
+        func, 
+        *args, 
+        **kwargs
+    ):
+        """
+        Execute a function with automatic retry on transient errors.
+        """
+        last_error = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                return await func(*args, **kwargs)
+            except asyncpg.DeadlockDetectedError as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delays[attempt])
+                    continue
+                raise
+            except asyncpg.SerializationError as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delays[attempt])
+                    continue
+                raise
+            except asyncpg.ConnectionDoesNotExistError as e:
+                # Reconnect and retry
+                await self.db_pool.initialize()
+                if attempt < self.max_retries - 1:
+                    continue
+                raise
+        
+        raise last_error
+```
+
+## 8. Infrastructure Requirements
+
+### Database Specifications
+
+#### Primary Database
+- **Engine**: PostgreSQL 15.4 with TimescaleDB 2.11
+- **Instance Class**: db.r6g.2xlarge (8 vCPU, 64 GB RAM)
+- **Storage**: 1TB GP3 SSD (16,000 IOPS, 1,000 MB/s)
+- **Multi-AZ**: Enabled for high availability
+- **Backup**: Automated daily, 30-day retention
+- **Encryption**: AES-256 at rest, TLS 1.2 in transit
+
+#### Read Replicas
+- **Count**: 2 replicas in different AZs
+- **Instance Class**: db.r6g.xlarge (4 vCPU, 32 GB RAM)
+- **Purpose**: Analytics queries and reporting
+- **Lag Monitoring**: < 1 second acceptable
+
+### Connection Proxy Setup
+
+#### RDS Proxy Configuration
+```yaml
+ProxyName: etf-platform-proxy
+EngineFamily: POSTGRESQL
+Auth:
+  - AuthScheme: SECRETS
+    SecretArn: arn:aws:secretsmanager:region:account:secret:rds-credentials
+    IAMAuth: REQUIRED
+Target:
+  DBClusterIdentifier: etf-platform-cluster
+MaxConnectionsPercent: 100
+MaxIdleConnectionsPercent: 50
+ConnectionBorrowTimeout: 120
+SessionPinningFilters:
+  - EXCLUDE_VARIABLE_SETS
+VpcSubnetIds:
+  - subnet-xxxxxx
+  - subnet-yyyyyy
+SecurityGroups:
+  - sg-xxxxxx
+```
+
+#### Connection Pool Settings
+- **Min Connections**: 25
+- **Max Connections**: 100
+- **Connection Timeout**: 30 seconds
+- **Idle Timeout**: 300 seconds
+- **Max Queries per Connection**: 1000
+
+### Backup and Recovery Strategy
+
+#### Automated Backups
+- **Schedule**: Daily at 3 AM UTC
+- **Retention**: 30 days
+- **Type**: Automated snapshots
+- **Window**: 30 minutes
+
+#### Point-in-Time Recovery
+- **RPO**: 5 minutes
+- **RTO**: 30 minutes
+- **Method**: Continuous archiving to S3
+- **Testing**: Monthly recovery drills
+
+#### Disaster Recovery
+- **Cross-Region Replica**: us-west-2
+- **Sync Method**: Asynchronous
+- **Failover Time**: < 5 minutes
+- **Data Loss**: < 1 minute
+
+### Monitoring Requirements
+
+#### CloudWatch Metrics
+```yaml
+Alarms:
+  - MetricName: DatabaseConnections
+    Threshold: 80
+    ComparisonOperator: GreaterThanThreshold
+    
+  - MetricName: CPUUtilization
+    Threshold: 75
+    ComparisonOperator: GreaterThanThreshold
+    
+  - MetricName: ReadLatency
+    Threshold: 100  # milliseconds
+    ComparisonOperator: GreaterThanThreshold
+    
+  - MetricName: WriteLatency
+    Threshold: 200  # milliseconds
+    ComparisonOperator: GreaterThanThreshold
+    
+  - MetricName: FreeStorageSpace
+    Threshold: 104857600  # 100GB in bytes
+    ComparisonOperator: LessThanThreshold
+```
+
+#### Custom Metrics
+- **Query Performance**: P50, P95, P99 latencies
+- **Connection Pool**: Utilization and wait times
+- **Cache Hit Rate**: Per table and query type
+- **API Response Times**: By endpoint
+- **Data Freshness**: Lag from source APIs
+
+#### Logging Configuration
+- **Slow Query Log**: Queries > 1 second
+- **Connection Log**: Failed connections
+- **Error Log**: All database errors
+- **Audit Log**: Schema changes and admin actions
+- **Log Retention**: 90 days in CloudWatch Logs
+
+## 9. Migration Strategy
+
+### Data Migration Approach
+
+#### Phase 1: Parallel Running (Week 1)
+1. **Setup PostgreSQL** alongside SQLite
+2. **Replicate schema** with optimizations
+3. **Dual writes** to both databases
+4. **Validation** of data consistency
+
+#### Phase 2: Gradual Migration (Week 2-3)
+1. **Read traffic split**: 10% → 50% → 100%
+2. **Monitor performance** metrics
+3. **Rollback capability** maintained
+4. **Data sync verification**
+
+#### Phase 3: Cutover (Week 4)
+1. **Full traffic** to PostgreSQL
+2. **SQLite** in read-only mode
+3. **Final data validation**
+4. **Decommission** SQLite
+
+### Zero-Downtime Deployment
+
+#### Blue-Green Deployment
+```python
+class DatabaseRouter:
+    """
+    Route database traffic during migration.
+    """
+    
+    def __init__(self):
+        self.postgres_weight = float(os.getenv('POSTGRES_WEIGHT', '0.1'))
+        self.sqlite_cache = SQLiteStockDataCache()
+        self.postgres_cache = StockDataCache()
+    
+    async def get_cache_instance(self):
+        """Return cache instance based on traffic split."""
+        if random.random() < self.postgres_weight:
+            return self.postgres_cache
+        return self.sqlite_cache
+    
+    async def dual_write(self, ticker: str, data: pd.DataFrame, source: str):
+        """Write to both databases during migration."""
+        results = await asyncio.gather(
+            self.sqlite_cache.cache_data(ticker, data, source),
+            self.postgres_cache.cache_data(ticker, data, source),
+            return_exceptions=True
+        )
+        
+        # Log any discrepancies
+        if results[0] != results[1]:
+            logging.warning(f"Write discrepancy for {ticker}: SQLite={results[0]}, PostgreSQL={results[1]}")
+```
+
+### Rollback Procedures
+
+#### Automated Rollback Triggers
+- **Error Rate** > 5% triggers rollback
+- **Latency** > 200ms P99 triggers rollback
+- **Connection Failures** > 10/minute
+- **Data Inconsistency** detected
+
+#### Rollback Steps
+1. **Update traffic weights** to 0% PostgreSQL
+2. **Pause write operations** temporarily
+3. **Verify SQLite** is receiving all traffic
+4. **Investigate issues** in PostgreSQL
+5. **Resume operations** with SQLite only
+
+### Data Validation
+
+#### Validation Queries
+```sql
+-- Record count validation
+SELECT 
+    'sqlite' as source,
+    ticker_symbol,
+    COUNT(*) as record_count,
+    MIN(date) as min_date,
+    MAX(date) as max_date
+FROM sqlite_stock_data
+GROUP BY ticker_symbol
+
+UNION ALL
+
+SELECT 
+    'postgres' as source,
+    ticker_symbol,
+    COUNT(*) as record_count,
+    MIN(date) as min_date,
+    MAX(date) as max_date
+FROM stock_data
+GROUP BY ticker_symbol;
+
+-- Data integrity check
+WITH data_comparison AS (
+    SELECT 
+        s.ticker_symbol,
+        s.date,
+        s.close as sqlite_close,
+        p.close as postgres_close,
+        ABS(s.close - p.close) as price_diff
+    FROM sqlite_stock_data s
+    FULL OUTER JOIN stock_data p 
+        ON s.ticker_symbol = p.ticker_symbol 
+        AND s.date = p.date
+)
+SELECT 
+    ticker_symbol,
+    COUNT(*) as mismatches,
+    AVG(price_diff) as avg_diff,
+    MAX(price_diff) as max_diff
+FROM data_comparison
+WHERE price_diff > 0.0001
+GROUP BY ticker_symbol;
+```
+
+## 10. Performance Benchmarks
+
+### Current Performance (SQLite)
+- **Single Query**: 200-500ms
+- **Concurrent Queries**: 10 max
+- **Bulk Insert**: 100 records/second
+- **Connection Time**: 100-300ms
+- **Cold Start**: 2-3 seconds
+
+### Expected Performance (PostgreSQL + RDS Proxy)
+- **Single Query**: 20-50ms (90% improvement)
+- **Concurrent Queries**: 1000+ (100x improvement)
+- **Bulk Insert**: 10,000+ records/second (100x improvement)
+- **Connection Time**: 5-10ms (95% improvement)
+- **Cold Start**: 200-500ms (80% improvement)
+
+### Benchmark Test Suite
+
+```python
+import asyncio
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+class PerformanceBenchmark:
+    """
+    Comprehensive performance testing suite.
+    """
+    
+    async def benchmark_query_performance(self):
+        """Test single query performance."""
+        ticker = "AAPL"
+        start_date = date(2023, 1, 1)
+        end_date = date(2023, 12, 31)
+        
+        # Warm up
+        await self.db.get_price_data(ticker, start_date, end_date)
+        
+        # Benchmark
+        times = []
+        for _ in range(100):
+            start = time.time()
+            await self.db.get_price_data(ticker, start_date, end_date)
+            times.append(time.time() - start)
+        
+        return {
+            'p50': np.percentile(times, 50) * 1000,
+            'p95': np.percentile(times, 95) * 1000,
+            'p99': np.percentile(times, 99) * 1000,
+        }
+    
+    async def benchmark_concurrent_load(self):
+        """Test concurrent query handling."""
+        async def query_task(ticker):
+            return await self.db.get_latest_prices([ticker])
+        
+        # Create 1000 concurrent requests
+        tickers = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"] * 200
+        tasks = [query_task(ticker) for ticker in tickers]
+        
+        start = time.time()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        duration = time.time() - start
+        
+        errors = sum(1 for r in results if isinstance(r, Exception))
+        
+        return {
+            'total_requests': len(tasks),
+            'duration': duration,
+            'rps': len(tasks) / duration,
+            'errors': errors,
+            'error_rate': errors / len(tasks)
+        }
+    
+    async def benchmark_bulk_insert(self):
+        """Test bulk insert performance."""
+        # Generate test data
+        dates = pd.date_range('2020-01-01', '2023-12-31', freq='B')
+        data = pd.DataFrame({
+            'Date': dates,
+            'Open': np.random.uniform(100, 200, len(dates)),
+            'High': np.random.uniform(100, 200, len(dates)),
+            'Low': np.random.uniform(100, 200, len(dates)),
+            'Close': np.random.uniform(100, 200, len(dates)),
+            'Volume': np.random.randint(1000000, 10000000, len(dates)),
+            'Adj Close': np.random.uniform(100, 200, len(dates))
+        })
+        data.set_index('Date', inplace=True)
+        
+        start = time.time()
+        records_inserted = await self.db.bulk_insert_stock_data(
+            'TEST', data, 'benchmark'
+        )
+        duration = time.time() - start
+        
+        return {
+            'records': records_inserted,
+            'duration': duration,
+            'records_per_second': records_inserted / duration
+        }
+```
+
+### Load Testing Results
+
+#### Query Performance
+| Metric | SQLite | PostgreSQL | Improvement |
+|--------|--------|------------|-------------|
+| P50 Latency | 250ms | 25ms | 10x |
+| P95 Latency | 450ms | 45ms | 10x |
+| P99 Latency | 800ms | 80ms | 10x |
+| Max Concurrent | 10 | 1000+ | 100x |
+
+#### Bulk Operations
+| Operation | SQLite | PostgreSQL | Improvement |
+|-----------|--------|------------|-------------|
+| Insert Rate | 100/s | 10,000/s | 100x |
+| Batch Size | 100 | 10,000 | 100x |
+| Transaction Time | 2s | 0.2s | 10x |
+
+#### Connection Management
+| Metric | SQLite | PostgreSQL + Proxy | Improvement |
+|--------|--------|--------------------|-------------|
+| Connection Time | 200ms | 5ms | 40x |
+| Pool Efficiency | N/A | 95% | N/A |
+| Connection Reuse | 0% | 95% | ∞ |
+
+This PRD provides a comprehensive roadmap for migrating from SQLite to PostgreSQL with connection pooling, addressing all the performance bottlenecks in your serverless environment. The implementation will enable your platform to handle enterprise-scale loads while maintaining sub-100ms response times.# PRD: Memory-Efficient Data Processing
+
+## 1. Executive Summary
+
+This PRD outlines a comprehensive strategy to optimize memory usage in the ETF Research Platform API, specifically targeting the serverless deployment constraints of Vercel's 512MB memory limit. The current implementation creates memory spikes when processing large DataFrames, particularly when handling multiple tickers over extended time periods.
+
+**Key Objectives:**
+- Reduce memory footprint by 50-70% through dtype optimization and chunked processing
+- Implement streaming responses to prevent memory accumulation
+- Ensure predictable memory patterns that stay well below 400MB threshold
+- Maintain or improve processing performance while reducing memory usage
+
+**Expected Impact:**
+- Eliminate OOM errors in production
+- Enable processing of 10+ years of data for multiple tickers
+- Reduce serverless function costs through efficient resource utilization
+- Improve API reliability and response times
+
+## 2. Problem Statement
+
+### Current Memory Issues
+
+1. **DataFrame Memory Explosion**
+   - Loading full historical data (10+ years) for multiple tickers creates DataFrames consuming 100-200MB each
+   - `pd.concat()` operations in `cached_data_fetcher.py` duplicate data temporarily
+   - No memory-efficient dtypes used (all float64/int64 by default)
+
+2. **Inefficient Data Operations**
+   - Multiple DataFrame copies during transformations
+   - Full dataset loading before filtering
+   - No chunked processing for large date ranges
+   - Accumulation of intermediate results without cleanup
+
+3. **API Response Buffering**
+   - Converting entire DataFrames to JSON in memory
+   - No streaming response mechanism
+   - Large response objects held in memory until completion
+
+4. **Lack of Memory Monitoring**
+   - No visibility into memory usage patterns
+   - Unable to predict memory requirements for requests
+   - No early warning system for approaching limits
+
+## 3. Goals & Success Metrics
+
+### Primary Goals
+
+1. **Memory Efficiency**
+   - Stay under 400MB memory usage for all standard operations
+   - Reduce per-ticker memory footprint by 60%
+   - Enable processing of 20+ tickers with 10 years of data
+
+2. **Performance Maintenance**
+   - No more than 10% increase in response times
+   - Maintain sub-5 second response for typical requests
+   - Support concurrent request handling
+
+3. **Reliability**
+   - Zero OOM errors in production
+   - Graceful degradation for extreme requests
+   - Predictable memory usage patterns
+
+### Success Metrics
+
+| Metric | Current | Target | Measurement Method |
+|--------|---------|--------|-------------------|
+| Peak Memory Usage | 450-512MB | <400MB | Memory profiler |
+| Per-Ticker Memory | 50-100MB | 20-40MB | Heap analysis |
+| OOM Error Rate | 5-10% | 0% | Error logs |
+| P95 Response Time | 4.5s | <5s | APM metrics |
+| Max Concurrent Requests | 2-3 | 5+ | Load testing |
+
+## 4. Technical Requirements
+
+### Memory Optimization Requirements
+
+1. **DataFrame Dtype Optimization**
+   - Use float32 instead of float64 for price data (sufficient precision)
+   - Use int32 for volume data where appropriate
+   - Implement categorical dtypes for repeated string values
+   - Use date indexing efficiently
+
+2. **Chunked Processing**
+   - Implement configurable chunk sizes (e.g., 1000 rows)
+   - Process data in streaming fashion
+   - Avoid loading entire datasets when possible
+   - Implement sliding window operations
+
+3. **Memory-Conscious Operations**
+   - Use in-place operations where safe
+   - Implement explicit garbage collection
+   - Avoid unnecessary DataFrame copies
+   - Use views instead of copies when possible
+
+4. **Streaming Architecture**
+   - Implement generator-based data processing
+   - Stream JSON responses using chunked transfer encoding
+   - Process and send data incrementally
+   - Implement backpressure mechanisms
+
+### Constraints
+
+- Must maintain API compatibility
+- Cannot compromise data accuracy
+- Must work within Vercel's serverless constraints
+- Should not require infrastructure changes
+
+## 5. Implementation Plan
+
+### Phase 1: DataFrame Dtype Optimization (Week 1)
+
+**Objective:** Reduce memory footprint of existing DataFrames by 50%
+
+**Tasks:**
+1. Audit current dtype usage across all DataFrames
+2. Implement dtype mapping configuration
+3. Create dtype optimization utility functions
+4. Update data loading to use optimized dtypes
+5. Test precision impact on calculations
+
+**Deliverables:**
+- `memory_utils.py` with dtype optimization functions
+- Updated data sources with dtype specifications
+- Memory usage comparison report
+
+### Phase 2: Chunked Processing Implementation (Week 2)
+
+**Objective:** Enable processing of large datasets without loading all data into memory
+
+**Tasks:**
+1. Design chunking strategy for different operations
+2. Implement chunked data fetching
+3. Create chunked aggregation functions
+4. Update cache manager for chunk-aware operations
+5. Implement chunk size auto-tuning
+
+**Deliverables:**
+- `chunked_processor.py` module
+- Updated `cached_data_fetcher.py` with chunking support
+- Performance benchmarks
+
+### Phase 3: Streaming Response Infrastructure (Week 3)
+
+**Objective:** Stream API responses to prevent memory accumulation
+
+**Tasks:**
+1. Implement streaming JSON encoder
+2. Create generator-based response builders
+3. Update API endpoints for streaming
+4. Implement client-side streaming handlers
+5. Add progress indicators for long operations
+
+**Deliverables:**
+- `streaming_response.py` utilities
+- Updated API endpoints
+- Client examples
+
+### Phase 4: Memory Profiling and Monitoring (Week 4)
+
+**Objective:** Implement comprehensive memory monitoring and optimization validation
+
+**Tasks:**
+1. Integrate memory profiler
+2. Create memory usage decorators
+3. Implement memory threshold warnings
+4. Add memory metrics to logging
+5. Create memory optimization dashboard
+
+**Deliverables:**
+- Memory profiling infrastructure
+- Monitoring dashboard
+- Optimization validation report
+
+## 6. Technical Design
+
+### Dtype Optimization Strategy
+
+```python
+# Optimal dtype mapping for financial data
+DTYPE_MAPPING = {
+    'Open': 'float32',      # Price data: float32 provides sufficient precision
+    'High': 'float32',      # for financial applications (7 decimal places)
+    'Low': 'float32',
+    'Close': 'float32',
+    'Adj Close': 'float32',
+    'Volume': 'int32',      # Volume rarely exceeds int32 range
+    'ticker_symbol': 'category',  # Repeated strings as categories
+    'source': 'category',
+    'dividend_type': 'category'
+}
+
+# Memory savings example:
+# float64 (8 bytes) → float32 (4 bytes): 50% reduction
+# object (variable) → category (1-2 bytes): 80-90% reduction
+```
+
+### Chunking Architecture
+
+```python
+class ChunkedDataProcessor:
+    def __init__(self, chunk_size: int = 1000):
+        self.chunk_size = chunk_size
+    
+    def process_data_chunked(self, ticker: str, start_date: date, end_date: date):
+        """Process data in chunks to minimize memory usage"""
+        date_chunks = self._generate_date_chunks(start_date, end_date)
+        
+        for chunk_start, chunk_end in date_chunks:
+            # Process chunk
+            chunk_data = self._fetch_chunk(ticker, chunk_start, chunk_end)
+            processed = self._process_chunk(chunk_data)
+            
+            # Yield results immediately
+            yield processed
+            
+            # Explicit cleanup
+            del chunk_data
+            gc.collect()
+```
+
+### Streaming Response Pattern
+
+```python
+def stream_json_response(data_generator):
+    """Stream JSON response using generator"""
+    yield '{"data": ['
+    
+    first = True
+    for chunk in data_generator:
+        if not first:
+            yield ','
+        yield json.dumps(chunk)
+        first = False
+    
+    yield ']}'
+```
+
+### Memory Management Patterns
+
+```python
+# Context manager for memory-intensive operations
+@contextmanager
+def memory_limit(max_memory_mb: int):
+    """Enforce memory limit for operation"""
+    initial_memory = get_memory_usage()
+    
+    try:
+        yield
+    finally:
+        current_memory = get_memory_usage()
+        if current_memory > max_memory_mb:
+            # Force garbage collection
+            gc.collect()
+            
+        # Log memory usage
+        logger.info(f"Memory delta: {current_memory - initial_memory}MB")
+```
+
+## 7. Code Examples
+
+### Efficient DataFrame Creation
+
+```python
+def create_optimized_dataframe(data: List[Dict]) -> pd.DataFrame:
+    """Create memory-efficient DataFrame with optimized dtypes"""
+    # Pre-allocate arrays with correct dtypes
+    n_rows = len(data)
+    
+    # Use numpy arrays for efficiency
+    arrays = {
+        'Open': np.empty(n_rows, dtype=np.float32),
+        'High': np.empty(n_rows, dtype=np.float32),
+        'Low': np.empty(n_rows, dtype=np.float32),
+        'Close': np.empty(n_rows, dtype=np.float32),
+        'Volume': np.empty(n_rows, dtype=np.int32),
+    }
+    
+    # Fill arrays efficiently
+    for i, row in enumerate(data):
+        arrays['Open'][i] = row['Open']
+        arrays['High'][i] = row['High']
+        arrays['Low'][i] = row['Low']
+        arrays['Close'][i] = row['Close']
+        arrays['Volume'][i] = row['Volume']
+    
+    # Create DataFrame from arrays
+    df = pd.DataFrame(arrays)
+    
+    # Set index efficiently
+    dates = pd.to_datetime([row['Date'] for row in data])
+    df.index = dates
+    
+    return df
+```
+
+### Chunked Processing Loop
+
+```python
+def process_large_dataset_chunked(ticker: str, start_date: date, end_date: date, 
+                                 chunk_days: int = 365):
+    """Process large dataset in time-based chunks"""
+    results = []
+    current_date = start_date
+    
+    while current_date < end_date:
+        chunk_end = min(current_date + timedelta(days=chunk_days), end_date)
+        
+        # Process chunk
+        with memory_limit(100):  # Limit chunk processing to 100MB
+            chunk_data = fetch_data(ticker, current_date, chunk_end)
+            chunk_result = process_chunk(chunk_data)
+            results.append(chunk_result)
+            
+            # Clean up chunk data immediately
+            del chunk_data
+        
+        current_date = chunk_end + timedelta(days=1)
+    
+    # Combine results efficiently
+    return combine_results(results)
+```
+
+### Streaming Generator Functions
+
+```python
+def generate_ticker_data_stream(tickers: List[str], start_date: date, end_date: date):
+    """Generate ticker data as a stream to minimize memory usage"""
+    for ticker in tickers:
+        # Process one ticker at a time
+        ticker_data = fetch_ticker_data(ticker, start_date, end_date)
+        
+        # Convert to memory-efficient format
+        optimized_data = optimize_dataframe_memory(ticker_data)
+        
+        # Yield ticker result
+        yield {
+            'ticker': ticker,
+            'data': dataframe_to_records(optimized_data),
+            'stats': calculate_stats(optimized_data)
+        }
+        
+        # Clean up before next ticker
+        del ticker_data, optimized_data
+        gc.collect()
+```
+
+### Memory-Conscious Concatenation
+
+```python
+def concat_dataframes_efficiently(dataframes: List[pd.DataFrame]) -> pd.DataFrame:
+    """Concatenate DataFrames with minimal memory overhead"""
+    if not dataframes:
+        return pd.DataFrame()
+    
+    if len(dataframes) == 1:
+        return dataframes[0]
+    
+    # Use concat with copy=False to avoid duplication
+    result = pd.concat(dataframes, copy=False, sort=False)
+    
+    # Clear references to original dataframes
+    dataframes.clear()
+    
+    # Remove duplicates in-place
+    result = result[~result.index.duplicated(keep='last')]
+    
+    # Optimize memory usage
+    return optimize_dataframe_memory(result)
+```
+
+## 8. Performance Impact
+
+### Memory Usage Comparisons
+
+| Operation | Current Memory | Optimized Memory | Reduction |
+|-----------|---------------|-----------------|-----------|
+| Load 1 year OHLCV | 8.5MB | 3.4MB | 60% |
+| Load 10 years data | 85MB | 34MB | 60% |
+| Process 20 tickers | 1700MB | 680MB | 60% |
+| Concat operations | +200MB spike | +50MB spike | 75% |
+| JSON serialization | +150MB | Streaming (5MB) | 97% |
+
+### Processing Time Trade-offs
+
+| Operation | Current Time | Optimized Time | Delta |
+|-----------|-------------|----------------|-------|
+| Simple query | 0.5s | 0.5s | 0% |
+| Large dataset | 3.0s | 3.3s | +10% |
+| Streaming response | N/A | 0.1s first byte | -90% TTFB |
+| Memory cleanup | 0s | 0.1s | +0.1s |
+
+### Scalability Improvements
+
+- **Current**: Max 3 concurrent requests before OOM
+- **Optimized**: 10+ concurrent requests supported
+- **Memory per request**: 170MB → 40MB (76% reduction)
+- **Max dataset size**: 5 years → 20+ years
+
+## 9. Testing Strategy
+
+### Memory Profiling Tests
+
+```python
+@memory_profile
+def test_large_dataset_processing():
+    """Test memory usage with large dataset"""
+    # Baseline measurement
+    initial_memory = get_memory_usage()
+    
+    # Process 10 years of data for 20 tickers
+    tickers = generate_test_tickers(20)
+    start_date = date(2014, 1, 1)
+    end_date = date(2024, 1, 1)
+    
+    results = process_tickers_optimized(tickers, start_date, end_date)
+    
+    # Verify memory constraints
+    peak_memory = get_peak_memory_usage()
+    assert peak_memory < 400, f"Peak memory {peak_memory}MB exceeds limit"
+    
+    # Verify data integrity
+    assert len(results) == 20
+    assert all(validate_ticker_data(r) for r in results)
+```
+
+### Large Dataset Stress Tests
+
+```python
+def stress_test_memory_limits():
+    """Stress test with increasing dataset sizes"""
+    test_cases = [
+        (5, 1),    # 5 tickers, 1 year
+        (10, 5),   # 10 tickers, 5 years
+        (20, 10),  # 20 tickers, 10 years
+        (50, 10),  # 50 tickers, 10 years
+    ]
+    
+    for num_tickers, years in test_cases:
+        with memory_monitor() as monitor:
+            process_test_case(num_tickers, years)
+            
+        assert monitor.peak_memory < 400
+        assert monitor.oom_count == 0
+```
+
+### Edge Case Handling
+
+```python
+def test_edge_cases():
+    """Test edge cases and boundary conditions"""
+    # Empty dataset
+    assert process_tickers_optimized([], date.today(), date.today()) == []
+    
+    # Single row dataset
+    result = process_single_row_data()
+    assert validate_result(result)
+    
+    # Maximum chunk size
+    large_chunk = create_test_data(rows=10000)
+    assert process_chunk(large_chunk).memory_usage < 100
+    
+    # Concurrent processing
+    results = run_concurrent_requests(count=10)
+    assert all(r.success for r in results)
+```
+
+## 10. Monitoring
+
+### Memory Usage Metrics
+
+```python
+class MemoryMonitor:
+    """Real-time memory monitoring for production"""
+    
+    def __init__(self):
+        self.metrics = []
+        self.alerts = []
+    
+    def record_metric(self, operation: str, memory_mb: float, duration: float):
+        """Record memory usage metric"""
+        metric = {
+            'timestamp': datetime.utcnow(),
+            'operation': operation,
+            'memory_mb': memory_mb,
+            'duration': duration,
+            'memory_per_second': memory_mb / duration if duration > 0 else 0
+        }
+        self.metrics.append(metric)
+        
+        # Check thresholds
+        if memory_mb > 350:
+            self.trigger_alert('HIGH_MEMORY', f'{operation} used {memory_mb}MB')
+    
+    def get_dashboard_data(self):
+        """Get data for monitoring dashboard"""
+        return {
+            'current_memory': get_current_memory(),
+            'peak_memory_1h': max(m['memory_mb'] for m in self.recent_metrics(hours=1)),
+            'avg_memory_1h': np.mean([m['memory_mb'] for m in self.recent_metrics(hours=1)]),
+            'high_memory_operations': self.get_high_memory_operations(),
+            'memory_trend': self.calculate_memory_trend()
+        }
+```
+
+### OOM Error Tracking
+
+```python
+def track_oom_errors(func):
+    """Decorator to track OOM errors"""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except MemoryError as e:
+            # Log detailed context
+            log_oom_error({
+                'function': func.__name__,
+                'args': str(args)[:100],
+                'memory_at_error': get_current_memory(),
+                'traceback': traceback.format_exc()
+            })
+            
+            # Attempt recovery
+            gc.collect()
+            
+            # Re-raise with context
+            raise MemoryError(f"OOM in {func.__name__}: {get_current_memory()}MB used") from e
+    
+    return wrapper
+```
+
+### Performance Dashboards
+
+```yaml
+# Grafana Dashboard Configuration
+memory_efficiency_dashboard:
+  panels:
+    - title: "Memory Usage Over Time"
+      type: graph
+      targets:
+        - metric: api.memory.usage
+        - metric: api.memory.peak
+      
+    - title: "Memory by Operation"
+      type: bar_chart
+      targets:
+        - metric: api.memory.by_operation
+      
+    - title: "OOM Error Rate"
+      type: stat
+      targets:
+        - metric: api.errors.oom_count
+      
+    - title: "Request Success Rate"
+      type: gauge
+      targets:
+        - metric: api.requests.success_rate
+      
+    - title: "Memory Efficiency Score"
+      type: stat
+      targets:
+        - metric: api.memory.efficiency_score
+      
+  alerts:
+    - name: "High Memory Usage"
+      condition: api.memory.usage > 350
+      severity: warning
+      
+    - name: "OOM Errors Detected"
+      condition: api.errors.oom_count > 0
+      severity: critical
+      
+    - name: "Memory Leak Suspected"
+      condition: api.memory.trend_1h > 50
+      severity: warning
+```
+
+## Appendices
+
+### A. Memory Profiling Tools
+
+- **memory_profiler**: Line-by-line memory usage
+- **tracemalloc**: Python's built-in memory tracking
+- **pympler**: Advanced memory analysis
+- **guppy3**: Heap analysis and profiling
+
+### B. References
+
+- [Pandas Memory Usage Optimization](https://pandas.pydata.org/docs/user_guide/scale.html)
+- [Python Memory Management](https://docs.python.org/3/c-api/memory.html)
+- [Vercel Serverless Limits](https://vercel.com/docs/concepts/limits/overview)
+- [Streaming JSON Responses](https://www.python.org/dev/peps/pep-3333/#streaming-responses)
+
+### C. Glossary
+
+- **OOM**: Out of Memory error
+- **TTFB**: Time to First Byte
+- **Dtype**: Data type in pandas/numpy
+- **Chunking**: Processing data in smaller pieces
+- **Streaming**: Sending data progressively without buffering# PRD: Parallel Data Fetching Implementation
+
+## 1. Executive Summary
+
+### Overview of Parallel Fetching Strategy
+The current implementation uses a sequential fallback pattern for data sources, resulting in significant delays when primary sources fail. This PRD proposes implementing a parallel data fetching architecture that queries multiple sources simultaneously, dramatically reducing response times while maintaining data quality and rate limit compliance.
+
+### Expected API Response Time Improvements
+- **Current State**: 10-20 seconds per ticker (sequential source fallback)
+- **Target State**: 2-4 seconds per ticker (parallel execution)
+- **Expected Improvement**: 70-80% reduction in response time
+- **Batch Processing**: 50 tickers in ~15 seconds vs current ~300 seconds
+
+### Cost-Benefit Analysis
+**Benefits:**
+- Improved user experience with faster data retrieval
+- Better API utilization across multiple sources
+- Increased reliability through concurrent fallback
+- Real-time source health monitoring
+- Optimized API costs through intelligent routing
+
+**Costs:**
+- Redis infrastructure for global rate limiting
+- Increased code complexity
+- Initial development effort (~40 hours)
+- Ongoing monitoring and maintenance
+
+## 2. Problem Statement
+
+### Current Issues
+1. **Sequential Source Fallback Causing 10-20s Delays**
+   - Each source timeout adds 5-10 seconds
+   - Failed sources are retried unnecessarily
+   - No circuit breaker pattern for failing sources
+
+2. **Inefficient Use of Multiple Data Sources**
+   - Sources queried one by one
+   - No parallel execution capability
+   - Cache checks happen before each API call
+
+3. **Rate Limiting Not Coordinated Globally**
+   - Each source manages its own rate limits
+   - No global view of API usage
+   - Risk of hitting limits during peak usage
+
+### Impact
+- Poor user experience with slow data retrieval
+- Unnecessary API calls to failing sources
+- Suboptimal resource utilization
+- Higher operational costs
+
+## 3. Goals & Success Metrics
+
+### Primary Goals
+1. **Reduce Data Fetch Time by 70%**
+   - Target: 2-4 seconds per ticker
+   - Batch operations under 20 seconds for 50 tickers
+
+2. **Maintain Rate Limit Compliance**
+   - Zero rate limit violations
+   - Intelligent request distribution
+   - Global rate limit awareness
+
+3. **Optimize API Usage Costs**
+   - Reduce unnecessary API calls by 40%
+   - Prioritize cost-effective sources
+   - Cache hit rate above 60%
+
+### Success Metrics
+- **Performance**: P95 response time < 4 seconds
+- **Reliability**: 99.9% uptime for data fetching
+- **Efficiency**: API call reduction of 40%
+- **Cost**: 30% reduction in API costs
+- **User Satisfaction**: Response time complaints reduced by 80%
+
+## 4. Technical Requirements
+
+### Implement Parallel Source Querying with Fallback
+- Async/await pattern for concurrent execution
+- Configurable timeout per source (default 3 seconds)
+- First successful response wins
+- Automatic fallback to next available source
+- Support for partial data merging
+
+### Global Rate Limiter Using Redis
+- Centralized rate limit tracking
+- Token bucket algorithm implementation
+- Per-source and global limits
+- Real-time usage monitoring
+- Graceful degradation when limits approached
+
+### Circuit Breaker Pattern for Failing Sources
+- Automatic source disabling after consecutive failures
+- Configurable failure threshold (default: 3 failures)
+- Exponential backoff for recovery attempts
+- Health check endpoints
+- Manual override capability
+
+### Intelligent Source Selection Based on Data Availability
+- Historical success rate tracking
+- Cost-per-request optimization
+- Data quality scoring
+- Geographic proximity routing
+- Time-of-day optimization
+
+## 5. Implementation Plan
+
+### Phase 1: Parallel Fetching Infrastructure (Week 1-2)
+- Implement AsyncDataFetcher class
+- Add concurrent execution with asyncio
+- Create parallel fetch orchestrator
+- Unit tests for concurrent operations
+- Performance benchmarking
+
+### Phase 2: Redis Rate Limiter Integration (Week 3)
+- Set up Redis infrastructure
+- Implement token bucket rate limiter
+- Add global rate limit manager
+- Create rate limit monitoring dashboard
+- Integration tests
+
+### Phase 3: Source Health Monitoring (Week 4)
+- Implement circuit breaker pattern
+- Add health check endpoints
+- Create source status dashboard
+- Set up alerting for source failures
+- Historical metrics collection
+
+### Phase 4: Cost Optimization Logic (Week 5)
+- Implement cost tracking per source
+- Add intelligent routing algorithm
+- Create cost optimization engine
+- Build cost monitoring dashboard
+- A/B testing framework
+
+## 6. Architecture Design
+
+### Parallel Execution Flow Diagram
+```
+┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
+│   Client    │────▶│ Parallel Fetcher│────▶│ Rate Limiter │
+└─────────────┘     └────────┬────────┘     └──────┬───────┘
+                             │                      │
+                    ┌────────┴────────┐            │
+                    ▼        ▼        ▼            ▼
+              ┌─────────┐┌─────────┐┌─────────┐┌────────┐
+              │AlphaVan ││ Tiingo  ││YFinance ││ Redis  │
+              └─────────┘└─────────┘└─────────┘└────────┘
+                    │        │        │
+                    └────────┴────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Response Merger │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  Cache Manager  │
+                    └─────────────────┘
+```
+
+### Rate Limiting Strategy
+- **Global Limits**: 1000 requests/minute across all sources
+- **Per-Source Limits**: 
+  - AlphaVantage: 5 requests/minute (25 daily)
+  - Tiingo: 50 requests/minute (1000 monthly)
+  - YFinance: 100 requests/minute (no limit)
+  - Finnhub: 10 requests/minute (200 monthly)
+  - Polygon: 50 requests/minute (100 daily)
+
+### Error Handling and Fallback Logic
+1. Primary source timeout (3s) → Try secondary sources
+2. All sources fail → Return cached data if available
+3. No cached data → Return error with detailed message
+4. Circuit breaker open → Skip failed source
+5. Rate limit exceeded → Queue request or return 429
+
+### Source Priority Algorithm
+```python
+priority_score = (
+    success_rate * 0.4 +
+    (1 - normalized_cost) * 0.3 +
+    data_quality * 0.2 +
+    (1 - normalized_latency) * 0.1
+)
+```
+
+## 7. Code Examples
+
+### Parallel Fetching with asyncio
+```python
+class ParallelDataFetcher:
+    async def fetch_parallel(self, ticker: str, start_date: date, end_date: date) -> pd.DataFrame:
+        tasks = []
+        for source in self.active_sources:
+            if await self.rate_limiter.can_request(source.name):
+                task = asyncio.create_task(
+                    self._fetch_with_timeout(source, ticker, start_date, end_date)
+                )
+                tasks.append((source.name, task))
+        
+        # Wait for first successful response
+        for completed in asyncio.as_completed([t[1] for t in tasks], timeout=5.0):
+            try:
+                result = await completed
+                if result is not None and not result.empty:
+                    # Cancel remaining tasks
+                    for _, task in tasks:
+                        if not task.done():
+                            task.cancel()
+                    return result
+            except Exception as e:
+                logger.warning(f"Source failed: {e}")
+                continue
+        
+        raise Exception("All sources failed")
+```
+
+### Rate Limiter Implementation
+```python
+class RedisRateLimiter:
+    def __init__(self, redis_client):
+        self.redis = redis_client
+        self.limits = {
+            'AlphaVantage': {'per_minute': 5, 'daily': 25},
+            'Tiingo': {'per_minute': 50, 'monthly': 1000},
+            'YFinance': {'per_minute': 100},
+            'global': {'per_minute': 1000}
+        }
+    
+    async def can_request(self, source: str) -> bool:
+        # Check global limit
+        global_key = f"rate_limit:global:{int(time.time() / 60)}"
+        global_count = await self.redis.incr(global_key)
+        await self.redis.expire(global_key, 60)
+        
+        if global_count > self.limits['global']['per_minute']:
+            return False
+        
+        # Check source-specific limit
+        source_key = f"rate_limit:{source}:{int(time.time() / 60)}"
+        source_count = await self.redis.incr(source_key)
+        await self.redis.expire(source_key, 60)
+        
+        return source_count <= self.limits.get(source, {}).get('per_minute', float('inf'))
+```
+
+### Circuit Breaker Pattern
+```python
+class CircuitBreaker:
+    def __init__(self, failure_threshold=3, recovery_timeout=60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failures = defaultdict(int)
+        self.last_failure_time = {}
+        self.state = defaultdict(lambda: 'closed')  # closed, open, half_open
+    
+    async def call(self, source_name: str, func, *args, **kwargs):
+        if self.state[source_name] == 'open':
+            if time.time() - self.last_failure_time[source_name] > self.recovery_timeout:
+                self.state[source_name] = 'half_open'
+            else:
+                raise CircuitBreakerOpenError(f"{source_name} circuit breaker is open")
+        
+        try:
+            result = await func(*args, **kwargs)
+            if self.state[source_name] == 'half_open':
+                self.state[source_name] = 'closed'
+                self.failures[source_name] = 0
+            return result
+        except Exception as e:
+            self.failures[source_name] += 1
+            self.last_failure_time[source_name] = time.time()
+            
+            if self.failures[source_name] >= self.failure_threshold:
+                self.state[source_name] = 'open'
+                logger.error(f"Circuit breaker opened for {source_name}")
+            
+            raise e
+```
+
+### Source Selection Logic
+```python
+class IntelligentSourceSelector:
+    def __init__(self, metrics_store):
+        self.metrics = metrics_store
+    
+    def select_sources(self, ticker: str) -> List[DataSource]:
+        source_scores = []
+        
+        for source in self.all_sources:
+            metrics = self.metrics.get_source_metrics(source.name, ticker)
+            
+            score = self.calculate_priority_score(
+                success_rate=metrics['success_rate'],
+                cost_per_request=metrics['cost'],
+                data_quality=metrics['quality_score'],
+                avg_latency=metrics['avg_latency']
+            )
+            
+            source_scores.append((source, score))
+        
+        # Sort by score descending
+        source_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top sources that are currently healthy
+        return [s[0] for s in source_scores if self.circuit_breaker.is_healthy(s[0].name)]
+```
+
+## 8. Dependencies & Risks
+
+### Redis Infrastructure Requirements
+- Redis 6.0+ for optimal performance
+- Minimum 2GB RAM allocation
+- Redis Sentinel for high availability
+- Backup strategy for rate limit data
+- Connection pooling configuration
+
+### Network Concurrency Limits
+- OS-level file descriptor limits
+- Python asyncio event loop tuning
+- Connection pool sizing per source
+- DNS resolution caching
+- SSL/TLS session reuse
+
+### API Quota Management
+- Real-time quota tracking
+- Predictive quota usage
+- Quota reset time awareness
+- Emergency quota reservation
+- Cross-tenant quota sharing
+
+### Risks and Mitigation
+1. **Risk**: Redis single point of failure
+   - **Mitigation**: Redis Sentinel with automatic failover
+
+2. **Risk**: Thundering herd on cache miss
+   - **Mitigation**: Request coalescing and jitter
+
+3. **Risk**: Source API changes
+   - **Mitigation**: Version detection and adapter pattern
+
+4. **Risk**: Network saturation
+   - **Mitigation**: Adaptive concurrency limits
+
+## 9. Testing Strategy
+
+### Load Testing Scenarios
+1. **Baseline Performance**
+   - 100 concurrent ticker requests
+   - Measure response times and success rates
+   - Compare with current implementation
+
+2. **Stress Testing**
+   - 1000 concurrent requests
+   - Gradual load increase
+   - Identify breaking points
+
+3. **Spike Testing**
+   - Sudden load increase from 10 to 500 requests
+   - Recovery time measurement
+   - Queue behavior validation
+
+### Rate Limit Compliance Testing
+1. **Source Limit Testing**
+   - Verify each source respects its limits
+   - Test limit reset behavior
+   - Validate quota tracking accuracy
+
+2. **Global Limit Testing**
+   - Ensure global limits are enforced
+   - Test limit distribution fairness
+   - Validate queue behavior at limits
+
+### Failure Mode Testing
+1. **Source Failure Scenarios**
+   - Single source timeout
+   - Multiple source failures
+   - All sources unavailable
+   - Network partition testing
+
+2. **Circuit Breaker Testing**
+   - Failure threshold validation
+   - Recovery timeout testing
+   - Half-open state transitions
+   - Manual override functionality
+
+3. **Redis Failure Testing**
+   - Redis unavailability
+   - Fallback to local rate limiting
+   - Recovery after Redis returns
+   - Data consistency validation
+
+## 10. Monitoring & Observability
+
+### Metrics to Track
+1. **Performance Metrics**
+   - Request latency (P50, P95, P99)
+   - Throughput (requests/second)
+   - Success rate per source
+   - Cache hit ratio
+   - Queue depth and wait times
+
+2. **Resource Metrics**
+   - CPU and memory usage
+   - Network bandwidth utilization
+   - Redis connection pool stats
+   - AsyncIO task counts
+   - File descriptor usage
+
+3. **Business Metrics**
+   - API costs per source
+   - Data freshness scores
+   - User satisfaction scores
+   - Error rates by type
+   - SLA compliance
+
+### Alerting Thresholds
+1. **Critical Alerts**
+   - Response time > 10s (P95)
+   - Success rate < 95%
+   - Redis unavailable
+   - All sources failing
+   - Rate limit violations
+
+2. **Warning Alerts**
+   - Response time > 5s (P95)
+   - Success rate < 99%
+   - Circuit breaker opened
+   - High queue depth (>100)
+   - Approaching rate limits (80%)
+
+### Performance Dashboards
+1. **Real-time Dashboard**
+   - Current request rate
+   - Active sources status
+   - Response time trends
+   - Error rate by source
+   - Queue status
+
+2. **Historical Dashboard**
+   - Daily/weekly trends
+   - Source reliability history
+   - Cost analysis
+   - Cache effectiveness
+   - User behavior patterns
+
+3. **Operations Dashboard**
+   - Circuit breaker states
+   - Rate limit usage
+   - Redis cluster health
+   - Network metrics
+   - Deployment status
+
+### Implementation Timeline
+- **Week 1-2**: Core parallel fetching
+- **Week 3**: Redis integration
+- **Week 4**: Monitoring and circuit breakers
+- **Week 5**: Cost optimization and testing
+- **Week 6**: Production rollout and monitoring
+
+### Success Criteria
+- 70% reduction in average response time
+- Zero rate limit violations in production
+- 40% reduction in API costs
+- 99.9% availability SLA met
+- Positive user feedback on performance# PRD: Streaming Response Implementation
+
+## 1. Executive Summary
+
+This document outlines the implementation of streaming responses for the ETF Research Platform to handle large datasets efficiently and provide real-time progress feedback to users.
+
+### Streaming Response Objectives
+- Eliminate timeout errors for large multi-ticker or extended date range requests
+- Provide immediate visual feedback during data processing
+- Enable progressive data rendering in the UI
+- Reduce memory footprint by processing data incrementally
+- Support graceful error recovery during stream processing
+
+### User Experience Improvements
+- First byte response in under 500ms (vs current 10-30 second wait times)
+- Real-time progress indicators showing processing status
+- Partial data visualization while fetching continues
+- Smoother interaction with no UI freezing
+- Clear error messaging for partial failures
+
+### Technical Benefits
+- Reduced server memory usage through incremental processing
+- Better resource utilization with streaming generators
+- Improved scalability for handling concurrent large requests
+- Enhanced monitoring capabilities with progress events
+- More resilient error handling with partial recovery
+
+## 2. Problem Statement
+
+The current implementation faces several critical issues when handling large data requests:
+
+### Large Responses Causing Timeouts
+- Requests for 50+ tickers or 5+ years of data frequently timeout
+- Current 10-second timeout in `useStockData.ts` is insufficient for large requests
+- Users receive generic timeout errors with no partial data
+- No visibility into processing progress
+
+### Poor User Experience with Long Waits
+- UI freezes during large data fetches
+- No feedback on processing status
+- Users often re-submit requests thinking the system is unresponsive
+- Cannot interact with partial results while fetch continues
+
+### Memory Inefficiency with Full Buffering
+- Server buffers entire response in memory before sending
+- Large responses (100MB+) can cause memory spikes
+- Multiple concurrent large requests can exhaust server resources
+- Client attempts to parse massive JSON payloads at once
+
+### No Progress Indication
+- Users have no visibility into:
+  - How many tickers have been processed
+  - Estimated time remaining
+  - Which data sources are being queried
+  - Current processing stage
+
+## 3. Goals & Success Metrics
+
+### Primary Goals
+- **Eliminate timeout errors** for requests up to 500 tickers
+- **First byte response** under 500ms for all requests
+- **Support unlimited dataset sizes** without memory constraints
+- **Real-time progress updates** every 100ms during processing
+
+### Success Metrics
+- **Response Time**: First byte < 500ms (currently 5-30 seconds)
+- **Timeout Rate**: < 0.1% of requests (currently ~15% for large requests)
+- **Memory Usage**: Peak memory < 512MB per request (currently unbounded)
+- **User Engagement**: 80% reduction in duplicate request submissions
+- **Progress Accuracy**: Progress estimates within 10% of actual time
+- **Stream Reliability**: 99.9% successful stream completion rate
+
+### Performance Targets
+- Stream 1,000 ticker-days per second
+- Handle 100 concurrent streaming requests
+- Process 10 years of data for 100 tickers without timeout
+- Recover from 95% of transient errors mid-stream
+
+## 4. Technical Requirements
+
+### FastAPI StreamingResponse Implementation
+- Generator-based response streaming using `StreamingResponse`
+- Chunked transfer encoding for HTTP/1.1 compatibility
+- Server-Sent Events (SSE) for progress updates
+- Backpressure handling to prevent overwhelming slow clients
+- Memory-efficient iterators for database queries
+
+### Frontend Streaming Consumption
+- Fetch API with streaming support (`response.body.getReader()`)
+- Progressive JSON parsing with streaming libraries
+- WebWorker-based processing to prevent UI blocking
+- Automatic reconnection for interrupted streams
+- Buffer management to handle variable chunk sizes
+
+### Progress Indication UI
+- Real-time progress bar with percentage complete
+- Current ticker being processed
+- Data points processed counter
+- Estimated time remaining
+- Data source status indicators
+
+### Error Handling Mid-Stream
+- Graceful degradation for partial failures
+- Error event streaming alongside data
+- Automatic retry for transient failures
+- Clear indication of skipped tickers
+- Summary of errors at stream completion
+
+### Format Flexibility
+- Support for multiple streaming formats:
+  - JSON Lines (JSONL) for easy parsing
+  - CSV streaming for large exports
+  - Binary formats (MessagePack) for efficiency
+  - Server-Sent Events for progress
+- Content negotiation via Accept headers
+
+## 5. Implementation Plan
+
+### Phase 1: Backend Streaming Infrastructure (Week 1-2)
+1. **Create streaming data generators**
+   - Implement async generators for ticker data fetching
+   - Add chunking logic for large result sets
+   - Create streaming JSON/CSV serializers
+   
+2. **Add streaming endpoints**
+   - `/data/stream` endpoint with StreamingResponse
+   - Progress event emission via SSE
+   - Chunked transfer encoding setup
+   
+3. **Database query optimization**
+   - Cursor-based pagination for large queries
+   - Streaming result sets from database
+   - Connection pooling for concurrent streams
+
+### Phase 2: Frontend Streaming Client (Week 3-4)
+1. **Implement streaming fetch utilities**
+   - ReadableStream consumer
+   - Progressive JSON parser
+   - Error boundary for stream failures
+   
+2. **Create progress state management**
+   - Redux/Zustand store for progress state
+   - Progress event parser
+   - UI update throttling
+   
+3. **Build streaming data processor**
+   - WebWorker for off-thread processing
+   - Incremental chart data updates
+   - Memory-efficient data structures
+
+### Phase 3: Progress UI Components (Week 5)
+1. **Design progress indicators**
+   - Progress bar component
+   - Status message display
+   - Ticker processing list
+   
+2. **Implement real-time updates**
+   - Smooth progress animations
+   - ETA calculation
+   - Error indicator badges
+   
+3. **Add user controls**
+   - Pause/resume streaming
+   - Cancel with partial results
+   - Priority reordering
+
+### Phase 4: Error Recovery Mechanisms (Week 6)
+1. **Implement retry logic**
+   - Exponential backoff for failures
+   - Partial result preservation
+   - Smart reconnection
+   
+2. **Add error reporting**
+   - Detailed error events
+   - Failed ticker tracking
+   - Recovery suggestions
+   
+3. **Create fallback mechanisms**
+   - Graceful degradation to batch mode
+   - Offline data caching
+   - Alternative data source switching
+
+## 6. API Design
+
+### Streaming Endpoint Specifications
+
+#### POST /data/stream
+```python
+class StreamingDataRequest(BaseModel):
+    tickers: List[str]
+    start_date: str
+    end_date: Optional[str] = None
+    format: Literal["jsonl", "csv", "sse", "msgpack"] = "jsonl"
+    chunk_size: int = 100  # Records per chunk
+    include_progress: bool = True
+    include_dividends: bool = False
+```
+
+#### Response Headers
+```
+Content-Type: application/x-ndjson  # or text/event-stream for SSE
+Transfer-Encoding: chunked
+Cache-Control: no-cache
+X-Stream-Format: jsonl
+X-Total-Tickers: 150
+X-Estimated-Duration: 45
+```
+
+### Response Format Options
+
+#### JSON Lines (JSONL)
+```json
+{"type": "progress", "ticker": "AAPL", "percentage": 5, "message": "Processing AAPL"}
+{"type": "data", "ticker": "AAPL", "date": "2024-01-01", "open": 150.0, "close": 152.0}
+{"type": "data", "ticker": "AAPL", "date": "2024-01-02", "open": 152.0, "close": 153.0}
+{"type": "error", "ticker": "INVALID", "error": "Ticker not found", "code": "NOT_FOUND"}
+{"type": "complete", "total_records": 5000, "errors": 2, "duration": 45.2}
+```
+
+#### Server-Sent Events (SSE)
+```
+event: progress
+data: {"ticker": "AAPL", "percentage": 5, "estimated_remaining": 42}
+
+event: data
+data: {"ticker": "AAPL", "records": [{"date": "2024-01-01", "close": 152.0}]}
+
+event: error
+data: {"ticker": "INVALID", "error": "Ticker not found"}
+
+event: complete
+data: {"summary": {"total": 5000, "success": 4998, "failed": 2}}
+```
+
+### Progress Event Structure
+```typescript
+interface ProgressEvent {
+  type: 'progress'
+  timestamp: number
+  current_ticker: string
+  tickers_completed: number
+  total_tickers: number
+  records_processed: number
+  estimated_total_records: number
+  percentage: number
+  rate: number  // records per second
+  estimated_remaining_seconds: number
+  current_source: string
+  memory_usage_mb: number
+}
+```
+
+### Error Handling Protocol
+```typescript
+interface StreamError {
+  type: 'error'
+  timestamp: number
+  ticker?: string
+  error_code: string
+  message: string
+  recoverable: boolean
+  retry_after?: number
+  partial_data?: any
+}
+```
+
+## 7. Frontend Integration
+
+### Streaming API Client
+```typescript
+class StreamingDataClient {
+  async *fetchStream(request: StreamingDataRequest): AsyncGenerator<StreamEvent> {
+    const response = await fetch('/data/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    })
+    
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      
+      for (const line of lines) {
+        if (line.trim()) {
+          yield JSON.parse(line)
+        }
+      }
+    }
+  }
+}
+```
+
+### Progress State Management
+```typescript
+interface StreamingState {
+  status: 'idle' | 'streaming' | 'paused' | 'complete' | 'error'
+  progress: {
+    percentage: number
+    currentTicker: string
+    tickersCompleted: number
+    totalTickers: number
+    recordsProcessed: number
+    estimatedRemaining: number
+    rate: number
+  }
+  data: Map<string, TickerData>
+  errors: StreamError[]
+  startTime: number
+  endTime?: number
+}
+
+const useStreamingData = () => {
+  const [state, dispatch] = useReducer(streamingReducer, initialState)
+  
+  const startStream = async (request: StreamingDataRequest) => {
+    dispatch({ type: 'START_STREAM' })
+    
+    try {
+      const client = new StreamingDataClient()
+      for await (const event of client.fetchStream(request)) {
+        dispatch({ type: 'STREAM_EVENT', payload: event })
+      }
+      dispatch({ type: 'COMPLETE_STREAM' })
+    } catch (error) {
+      dispatch({ type: 'STREAM_ERROR', payload: error })
+    }
+  }
+  
+  return { state, startStream }
+}
+```
+
+### UI/UX Considerations
+- **Progressive Rendering**: Update charts as data arrives
+- **Smooth Animations**: Use CSS transitions for progress updates
+- **Responsive Design**: Adapt progress UI for mobile screens
+- **Accessibility**: ARIA live regions for progress announcements
+- **User Control**: Allow pause/resume/cancel operations
+
+### Chart Rendering Optimization
+```typescript
+class IncrementalChartRenderer {
+  private chart: Chart
+  private dataBuffer: DataPoint[] = []
+  private updateTimer?: number
+  
+  constructor(chartElement: HTMLElement) {
+    this.chart = new Chart(chartElement, { 
+      animation: false,
+      responsive: true 
+    })
+  }
+  
+  addData(ticker: string, records: DataPoint[]) {
+    this.dataBuffer.push(...records)
+    this.scheduleUpdate()
+  }
+  
+  private scheduleUpdate() {
+    if (this.updateTimer) return
+    
+    this.updateTimer = requestAnimationFrame(() => {
+      this.chart.data.datasets.push(...this.processBuffer())
+      this.chart.update('none')  // No animation for performance
+      this.dataBuffer = []
+      this.updateTimer = undefined
+    })
+  }
+}
+```
+
+## 8. Code Examples
+
+### Backend: StreamingResponse Generator
+```python
+async def generate_ticker_data_stream(
+    tickers: List[str],
+    start_date: str,
+    end_date: str,
+    chunk_size: int = 100
+) -> AsyncGenerator[str, None]:
+    """Generate streaming JSON lines for ticker data."""
+    total_tickers = len(tickers)
+    
+    for idx, ticker in enumerate(tickers):
+        # Emit progress event
+        progress = {
+            "type": "progress",
+            "ticker": ticker,
+            "percentage": (idx / total_tickers) * 100,
+            "tickers_completed": idx,
+            "total_tickers": total_tickers,
+            "timestamp": datetime.now().isoformat()
+        }
+        yield json.dumps(progress) + "\n"
+        
+        try:
+            # Fetch data in chunks to avoid memory issues
+            async for chunk in fetch_ticker_data_chunked(ticker, start_date, end_date, chunk_size):
+                for record in chunk:
+                    data_event = {
+                        "type": "data",
+                        "ticker": ticker,
+                        **record
+                    }
+                    yield json.dumps(data_event) + "\n"
+                
+                # Allow other requests to process
+                await asyncio.sleep(0)
+                
+        except Exception as e:
+            error_event = {
+                "type": "error",
+                "ticker": ticker,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+            yield json.dumps(error_event) + "\n"
+    
+    # Emit completion event
+    completion = {
+        "type": "complete",
+        "total_tickers": total_tickers,
+        "timestamp": datetime.now().isoformat()
+    }
+    yield json.dumps(completion) + "\n"
+
+@app.post("/data/stream")
+async def stream_ticker_data(request: StreamingDataRequest):
+    """Stream ticker data with progress updates."""
+    generator = generate_ticker_data_stream(
+        request.tickers,
+        request.start_date,
+        request.end_date or datetime.now().strftime('%Y-%m-%d'),
+        request.chunk_size
+    )
+    
+    return StreamingResponse(
+        generator,
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+            "X-Total-Tickers": str(len(request.tickers))
+        }
+    )
+```
+
+### Frontend: Streaming Fetch with Streams
+```typescript
+export async function* streamTickerData(
+  tickers: string[],
+  startDate: string,
+  endDate: string,
+  onProgress?: (progress: ProgressEvent) => void
+): AsyncGenerator<DataEvent, void, unknown> {
+  const response = await fetch(API_ENDPOINTS.STREAM_DATA, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tickers,
+      start_date: startDate,
+      end_date: endDate,
+      format: 'jsonl',
+      include_progress: true
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+
+        try {
+          const event = JSON.parse(line)
+          
+          if (event.type === 'progress' && onProgress) {
+            onProgress(event as ProgressEvent)
+          }
+          
+          yield event
+        } catch (e) {
+          console.error('Failed to parse stream event:', e)
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// Usage example
+const processStream = async () => {
+  const dataMap = new Map<string, TickerData[]>()
+  
+  try {
+    for await (const event of streamTickerData(
+      ['AAPL', 'GOOGL', 'MSFT'],
+      '2020-01-01',
+      '2024-01-01',
+      (progress) => updateProgressUI(progress)
+    )) {
+      switch (event.type) {
+        case 'data':
+          const ticker = event.ticker
+          if (!dataMap.has(ticker)) {
+            dataMap.set(ticker, [])
+          }
+          dataMap.get(ticker)!.push(event)
+          updateChartIncremental(ticker, event)
+          break
+          
+        case 'error':
+          handleStreamError(event)
+          break
+          
+        case 'complete':
+          finalizeStream(event, dataMap)
+          break
+      }
+    }
+  } catch (error) {
+    console.error('Stream failed:', error)
+  }
+}
+```
+
+### Progress Event Handling
+```typescript
+const ProgressDisplay: React.FC = () => {
+  const [progress, setProgress] = useState<ProgressState>({
+    percentage: 0,
+    currentTicker: '',
+    message: '',
+    estimatedRemaining: 0
+  })
+
+  useEffect(() => {
+    const handleProgress = (event: ProgressEvent) => {
+      setProgress({
+        percentage: event.percentage,
+        currentTicker: event.current_ticker,
+        message: `Processing ${event.current_ticker} (${event.tickers_completed}/${event.total_tickers})`,
+        estimatedRemaining: event.estimated_remaining_seconds
+      })
+    }
+
+    // Subscribe to progress events
+    streamEventEmitter.on('progress', handleProgress)
+    
+    return () => {
+      streamEventEmitter.off('progress', handleProgress)
+    }
+  }, [])
+
+  return (
+    <div className="streaming-progress">
+      <div className="progress-bar">
+        <div 
+          className="progress-fill"
+          style={{ width: `${progress.percentage}%` }}
+        />
+      </div>
+      <div className="progress-details">
+        <span>{progress.message}</span>
+        <span>{formatDuration(progress.estimatedRemaining)} remaining</span>
+      </div>
+    </div>
+  )
+}
+```
+
+### Error Recovery Patterns
+```typescript
+class StreamingErrorRecovery {
+  private retryCount = new Map<string, number>()
+  private maxRetries = 3
+  private backoffBase = 1000
+
+  async handleStreamError(
+    error: StreamError,
+    resumeFrom?: string
+  ): Promise<boolean> {
+    if (!error.recoverable) {
+      return false
+    }
+
+    const retries = this.retryCount.get(error.ticker || 'global') || 0
+    if (retries >= this.maxRetries) {
+      return false
+    }
+
+    const backoff = this.backoffBase * Math.pow(2, retries)
+    await new Promise(resolve => setTimeout(resolve, backoff))
+
+    this.retryCount.set(error.ticker || 'global', retries + 1)
+    return true
+  }
+
+  async resumeStream(
+    originalRequest: StreamingDataRequest,
+    fromTicker?: string
+  ): Promise<AsyncGenerator<DataEvent>> {
+    const resumedRequest = {
+      ...originalRequest,
+      tickers: fromTicker 
+        ? originalRequest.tickers.slice(
+            originalRequest.tickers.indexOf(fromTicker)
+          )
+        : originalRequest.tickers
+    }
+
+    return streamTickerData(
+      resumedRequest.tickers,
+      resumedRequest.start_date,
+      resumedRequest.end_date
+    )
+  }
+}
+```
+
+## 9. Testing Strategy
+
+### Streaming Performance Tests
+```typescript
+describe('Streaming Performance', () => {
+  it('should handle 1000 tickers without memory leak', async () => {
+    const initialMemory = process.memoryUsage().heapUsed
+    const tickers = generateTickers(1000)
+    
+    const stream = streamTickerData(tickers, '2020-01-01', '2024-01-01')
+    let recordCount = 0
+    
+    for await (const event of stream) {
+      if (event.type === 'data') recordCount++
+      
+      // Check memory usage periodically
+      if (recordCount % 10000 === 0) {
+        const currentMemory = process.memoryUsage().heapUsed
+        expect(currentMemory - initialMemory).toBeLessThan(100 * 1024 * 1024) // 100MB max
+      }
+    }
+    
+    expect(recordCount).toBeGreaterThan(1000000)
+  })
+
+  it('should maintain consistent throughput', async () => {
+    const measurements: number[] = []
+    let lastTime = Date.now()
+    let lastCount = 0
+    
+    for await (const event of streamTickerData(['AAPL'], '2020-01-01', '2024-01-01')) {
+      if (event.type === 'progress') {
+        const now = Date.now()
+        const rate = (event.records_processed - lastCount) / ((now - lastTime) / 1000)
+        measurements.push(rate)
+        lastTime = now
+        lastCount = event.records_processed
+      }
+    }
+    
+    const avgRate = measurements.reduce((a, b) => a + b) / measurements.length
+    const variance = measurements.reduce((a, b) => a + Math.pow(b - avgRate, 2), 0) / measurements.length
+    
+    expect(Math.sqrt(variance) / avgRate).toBeLessThan(0.2) // 20% variance
+  })
+})
+```
+
+### Network Interruption Handling
+```typescript
+describe('Network Resilience', () => {
+  it('should recover from connection drops', async () => {
+    const mockFetch = jest.fn()
+    let callCount = 0
+    
+    mockFetch.mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        // Simulate connection drop after partial data
+        return createPartialStreamResponse(['AAPL'], 100)
+      }
+      // Resume with remaining data
+      return createStreamResponse(['AAPL'], 100, 200)
+    })
+    
+    const client = new ResilientStreamClient(mockFetch)
+    const results = await client.fetchWithRecovery(['AAPL'], '2020-01-01', '2021-01-01')
+    
+    expect(results.size).toBe(1)
+    expect(results.get('AAPL')).toHaveLength(200)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+})
+```
+
+### Large Dataset Scenarios
+```typescript
+describe('Large Dataset Handling', () => {
+  const scenarios = [
+    { tickers: 10, years: 10, expectedRecords: 25000 },
+    { tickers: 100, years: 5, expectedRecords: 125000 },
+    { tickers: 500, years: 1, expectedRecords: 125000 }
+  ]
+  
+  scenarios.forEach(({ tickers, years, expectedRecords }) => {
+    it(`should handle ${tickers} tickers over ${years} years`, async () => {
+      const startDate = new Date()
+      startDate.setFullYear(startDate.getFullYear() - years)
+      
+      const stream = streamTickerData(
+        generateTickers(tickers),
+        startDate.toISOString().split('T')[0],
+        new Date().toISOString().split('T')[0]
+      )
+      
+      let recordCount = 0
+      let errorCount = 0
+      const startTime = Date.now()
+      
+      for await (const event of stream) {
+        if (event.type === 'data') recordCount++
+        if (event.type === 'error') errorCount++
+      }
+      
+      const duration = Date.now() - startTime
+      
+      expect(recordCount).toBeGreaterThan(expectedRecords * 0.9)
+      expect(errorCount).toBeLessThan(tickers * 0.05) // Less than 5% error rate
+      expect(duration).toBeLessThan(60000) // Complete within 1 minute
+    })
+  })
+})
+```
+
+### Browser Compatibility
+```typescript
+describe('Browser Compatibility', () => {
+  const browsers = ['chrome', 'firefox', 'safari', 'edge']
+  
+  browsers.forEach(browser => {
+    it(`should work in ${browser}`, async () => {
+      const page = await playwright[browser].launch()
+      await page.goto('http://localhost:3000/test-streaming')
+      
+      await page.click('[data-testid="start-stream"]')
+      
+      // Wait for streaming to start
+      await page.waitForSelector('[data-testid="progress-bar"]')
+      
+      // Verify progress updates
+      const initialProgress = await page.getAttribute('[data-testid="progress-bar"]', 'aria-valuenow')
+      await page.waitForTimeout(5000)
+      const updatedProgress = await page.getAttribute('[data-testid="progress-bar"]', 'aria-valuenow')
+      
+      expect(Number(updatedProgress)).toBeGreaterThan(Number(initialProgress))
+      
+      // Verify data is being rendered
+      await page.waitForSelector('[data-testid="chart-container"] canvas')
+      
+      await page.close()
+    })
+  })
+})
+```
+
+## 10. User Experience
+
+### Loading States
+```typescript
+interface LoadingState {
+  status: 'initializing' | 'connecting' | 'streaming' | 'finalizing'
+  message: string
+  icon: string
+}
+
+const loadingStates: Record<string, LoadingState> = {
+  initializing: {
+    status: 'initializing',
+    message: 'Preparing to fetch data...',
+    icon: '🔄'
+  },
+  connecting: {
+    status: 'connecting',
+    message: 'Connecting to data sources...',
+    icon: '🔗'
+  },
+  streaming: {
+    status: 'streaming',
+    message: 'Streaming ticker data...',
+    icon: '📊'
+  },
+  finalizing: {
+    status: 'finalizing',
+    message: 'Processing final results...',
+    icon: '✨'
+  }
+}
+```
+
+### Progress Indicators
+```tsx
+const StreamingProgress: React.FC<{progress: ProgressState}> = ({ progress }) => {
+  return (
+    <div className="streaming-progress-container">
+      {/* Main progress bar */}
+      <div className="main-progress">
+        <div className="progress-header">
+          <h3>Fetching Market Data</h3>
+          <span className="progress-percentage">{progress.percentage.toFixed(1)}%</span>
+        </div>
+        <div className="progress-bar-container">
+          <div 
+            className="progress-bar-fill"
+            style={{ width: `${progress.percentage}%` }}
+          />
+        </div>
+      </div>
+      
+      {/* Detailed metrics */}
+      <div className="progress-metrics">
+        <div className="metric">
+          <span className="metric-label">Current Ticker</span>
+          <span className="metric-value">{progress.currentTicker}</span>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Tickers Processed</span>
+          <span className="metric-value">{progress.tickersCompleted} / {progress.totalTickers}</span>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Data Points</span>
+          <span className="metric-value">{progress.recordsProcessed.toLocaleString()}</span>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Processing Rate</span>
+          <span className="metric-value">{progress.rate.toFixed(0)} records/sec</span>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Time Remaining</span>
+          <span className="metric-value">{formatDuration(progress.estimatedRemaining)}</span>
+        </div>
+      </div>
+      
+      {/* Visual ticker progress */}
+      <div className="ticker-progress-list">
+        {progress.tickerStatuses.map(ticker => (
+          <div key={ticker.symbol} className={`ticker-status ${ticker.status}`}>
+            <span className="ticker-symbol">{ticker.symbol}</span>
+            <span className="ticker-status-icon">
+              {ticker.status === 'complete' ? '✓' : 
+               ticker.status === 'processing' ? '⏳' : 
+               ticker.status === 'error' ? '❌' : '⏸'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+### Partial Data Rendering
+```typescript
+class PartialDataRenderer {
+  private charts: Map<string, Chart> = new Map()
+  private pendingUpdates: Map<string, DataPoint[]> = new Map()
+  private updateInterval: number = 100 // ms
+  private updateTimer?: number
+
+  constructor(private container: HTMLElement) {
+    this.startUpdateLoop()
+  }
+
+  addData(ticker: string, dataPoints: DataPoint[]) {
+    if (!this.pendingUpdates.has(ticker)) {
+      this.pendingUpdates.set(ticker, [])
+      this.createChart(ticker)
+    }
+    
+    this.pendingUpdates.get(ticker)!.push(...dataPoints)
+  }
+
+  private createChart(ticker: string) {
+    const chartContainer = document.createElement('div')
+    chartContainer.className = 'ticker-chart'
+    chartContainer.dataset.ticker = ticker
+    this.container.appendChild(chartContainer)
+
+    const chart = new Chart(chartContainer, {
+      type: 'line',
+      data: { datasets: [] },
+      options: {
+        animation: false,
+        responsive: true,
+        scales: {
+          x: { type: 'time' },
+          y: { type: 'linear' }
+        }
+      }
+    })
+
+    this.charts.set(ticker, chart)
+  }
+
+  private startUpdateLoop() {
+    this.updateTimer = window.setInterval(() => {
+      this.processPendingUpdates()
+    }, this.updateInterval)
+  }
+
+  private processPendingUpdates() {
+    for (const [ticker, updates] of this.pendingUpdates) {
+      if (updates.length === 0) continue
+
+      const chart = this.charts.get(ticker)
+      if (!chart) continue
+
+      // Batch update chart data
+      const dataset = chart.data.datasets[0] || {
+        label: ticker,
+        data: [],
+        borderColor: this.getTickerColor(ticker),
+        fill: false
+      }
+
+      dataset.data.push(...updates.map(d => ({
+        x: new Date(d.date),
+        y: d.close
+      })))
+
+      if (!chart.data.datasets[0]) {
+        chart.data.datasets.push(dataset)
+      }
+
+      chart.update('none')
+      this.pendingUpdates.set(ticker, [])
+    }
+  }
+
+  destroy() {
+    if (this.updateTimer) {
+      clearInterval(this.updateTimer)
+    }
+    this.charts.forEach(chart => chart.destroy())
+  }
+}
+```
+
+### Error Messaging
+```typescript
+interface StreamErrorDisplay {
+  severity: 'warning' | 'error' | 'info'
+  title: string
+  message: string
+  actions?: Array<{
+    label: string
+    action: () => void
+  }>
+}
+
+const ErrorDisplay: React.FC<{errors: StreamError[]}> = ({ errors }) => {
+  const errorSummary = errors.reduce((acc, error) => {
+    const key = error.error_code || 'unknown'
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  return (
+    <div className="stream-errors">
+      <div className="error-summary">
+        <h4>Data Fetch Issues ({errors.length})</h4>
+        {Object.entries(errorSummary).map(([code, count]) => (
+          <div key={code} className="error-type">
+            <span className="error-code">{code}</span>
+            <span className="error-count">{count} ticker{count > 1 ? 's' : ''}</span>
+          </div>
+        ))}
+      </div>
+      
+      <details className="error-details">
+        <summary>View Details</summary>
+        <div className="error-list">
+          {errors.map((error, idx) => (
+            <div key={idx} className="error-item">
+              <span className="error-ticker">{error.ticker}</span>
+              <span className="error-message">{error.message}</span>
+              {error.recoverable && (
+                <button 
+                  className="retry-button"
+                  onClick={() => retryTicker(error.ticker!)}
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </details>
+    </div>
+  )
+}
+```
+
+## Summary
+
+This streaming implementation will transform the user experience for large data requests by:
+
+1. **Eliminating timeouts** through incremental data delivery
+2. **Providing real-time feedback** with detailed progress indicators
+3. **Enabling partial results** so users can start analyzing data immediately
+4. **Improving reliability** with robust error handling and recovery
+5. **Scaling efficiently** to handle massive datasets without memory constraints
+
+The phased implementation approach ensures each component is thoroughly tested before integration, minimizing risk while delivering incremental value to users.

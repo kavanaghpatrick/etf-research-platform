@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an expert software architect reviewing technical PRDs. Provide thorough, actionable feedback focusing on technical accuracy, implementation feasibility, and potential improvements."
+    },
+    {
+      "role": "user",
+      "content": "Please review this PRD for converting an ETF Research Platform API to async architecture. The platform runs on Vercel serverless (10s timeout, 512MB RAM) with FastAPI backend. Focus on:\n\n1. Technical accuracy of async patterns\n2. Feasibility of performance claims (3-5x improvement)\n3. Missing considerations for serverless environment\n4. Database operation concerns (SQLite to PostgreSQL migration)\n5. Testing and rollout strategy\n\nThe PRD covers converting all endpoints to async, implementing concurrent operations with asyncio.gather(), and maintaining backward compatibility. Please provide specific technical feedback and recommendations."
+    }
+  ],
+  "model": "grok-2-vision-1212",
+  "stream": false,
+  "temperature": 0.1,
+  "max_tokens": 4000
+}

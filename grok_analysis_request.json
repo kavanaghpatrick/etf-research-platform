@@ -1,0 +1,82 @@
+{
+  "request_type": "api_optimization_analysis",
+  "timestamp": "2025-01-14T00:00:00Z",
+  "project": "ETF Research Platform",
+  "focus": "Price Data Collection and Serving Optimization",
+  
+  "current_architecture": {
+    "framework": "FastAPI with Python 3.9+",
+    "data_sources": [
+      "AlphaVantage (25 requests/day, 12s intervals)",
+      "Tiingo (1000 requests/month, 1s intervals)",
+      "YFinance (unlimited, no API key)",
+      "Finnhub (200 requests/month, 3s intervals)",
+      "Polygon (100 requests/day, 1s intervals)"
+    ],
+    "cache_system": "SQLite (local) / PostgreSQL (production)",
+    "deployment": "Vercel serverless functions",
+    "concurrency": "asyncio with ThreadPoolExecutor"
+  },
+
+  "performance_issues": [
+    "Sequential data source fallback causing high latency",
+    "SQLite concurrency issues with dividend processing",
+    "No connection pooling for database operations",
+    "Rate limiting implemented per-source but not globally optimized",
+    "Large data transfers (5+ years of daily data) causing timeouts",
+    "No streaming responses for large datasets",
+    "Memory usage spikes during multi-ticker batch processing"
+  ],
+
+  "optimization_requests": [
+    "How to implement parallel data fetching across multiple sources?",
+    "Best practices for connection pooling in serverless environment?",
+    "Caching strategies to reduce API dependency?",
+    "Data compression techniques for large historical datasets?",
+    "Streaming responses vs batch processing trade-offs?",
+    "Database optimization for time-series data?",
+    "Error handling and retry strategies for financial data APIs?",
+    "Memory-efficient processing of large datasets?",
+    "Rate limiting optimization across multiple data sources?",
+    "Monitoring and alerting for data source health?"
+  ],
+
+  "code_samples": {
+    "main_api": "See main.py - FastAPI endpoints with async/await",
+    "data_fetcher": "See cached_data_fetcher.py - Cache-first strategy with gap detection",
+    "data_sources": "See simple_data_sources.py - Individual source implementations with rate limiting",
+    "cache_manager": "SQLite/PostgreSQL managers with intelligent gap detection"
+  },
+
+  "constraints": {
+    "deployment": "Vercel serverless (10s timeout, 512MB memory)",
+    "budget": "Free tier APIs preferred, minimal infrastructure costs",
+    "reliability": "99.9% uptime target for price data serving",
+    "latency": "Sub-2s response time for cached data, sub-10s for fresh data",
+    "scalability": "Support 100+ concurrent users, 1000+ ticker requests/hour"
+  },
+
+  "specific_questions": [
+    "Should we implement Redis for high-frequency cache access?",
+    "Is connection pooling beneficial in serverless functions?",
+    "How to handle API rate limits across distributed serverless instances?",
+    "Best practices for handling large time-series datasets in memory?",
+    "Optimal database schema for financial time-series data?",
+    "How to implement real-time data updates efficiently?",
+    "Strategies for handling data source failures gracefully?",
+    "Memory optimization techniques for pandas DataFrames?",
+    "Async vs sync database operations in FastAPI?",
+    "How to implement efficient data compression for API responses?"
+  ],
+
+  "desired_outcomes": [
+    "Reduce average API response time by 50%",
+    "Implement 90%+ cache hit rate for historical data",
+    "Support 10x more concurrent users",
+    "Reduce API costs by optimizing data source usage",
+    "Implement robust error handling and failover",
+    "Add real-time monitoring and alerting",
+    "Optimize memory usage for large datasets",
+    "Implement efficient data streaming for large responses"
+  ]
+}

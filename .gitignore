@@ -77,3 +77,16 @@ cache/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# API Keys and secrets
+*api-key*
+*api_key*
+*.key
+*.pem
+*.cert
+*grok_review*
+
+# Next.js
+.next/
+out/
+node_modules/

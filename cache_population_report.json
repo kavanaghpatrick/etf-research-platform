@@ -1,0 +1,1047 @@
+{
+  "timestamp": "2025-07-13T14:56:41.939210",
+  "duration_seconds": 23.191217184066772,
+  "tickers_processed": 50,
+  "successful_tickers": 50,
+  "failed_tickers": 0,
+  "success_rate": 100.0,
+  "total_data_points": 100,
+  "total_api_calls": 50,
+  "initial_stats": {
+    "status": "success",
+    "timestamp": "2025-07-13T14:56:17.205593",
+    "summary": {
+      "total_tickers": 20,
+      "total_records": 0,
+      "average_coverage": 0.0,
+      "current_tickers": 0,
+      "recent_tickers": 0,
+      "stale_tickers": 0
+    },
+    "top_coverage": [
+      {
+        "ticker": "AAPL",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "SPY",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "QQQ",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "VTI",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "MSFT",
+        "coverage": 0.0,
+        "records": 0
+      }
+    ],
+    "largest_cache": [
+      {
+        "ticker": "AAPL",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "SPY",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "QQQ",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "VTI",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "MSFT",
+        "records": 0,
+        "coverage": 0.0
+      }
+    ],
+    "all_stats": [
+      {
+        "ticker": "AAPL",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "SPY",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "QQQ",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "VTI",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "MSFT",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "GOOGL",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "TSLA",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "NVDA",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "META",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "AMZN",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "BRK-B",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "V",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "JNJ",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "WMT",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "JPM",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "XOM",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "UNH",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "HD",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "PG",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "DIS",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      }
+    ]
+  },
+  "final_stats": {
+    "status": "success",
+    "timestamp": "2025-07-13T14:56:40.397949",
+    "summary": {
+      "total_tickers": 20,
+      "total_records": 0,
+      "average_coverage": 0.0,
+      "current_tickers": 0,
+      "recent_tickers": 0,
+      "stale_tickers": 0
+    },
+    "top_coverage": [
+      {
+        "ticker": "AAPL",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "SPY",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "QQQ",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "VTI",
+        "coverage": 0.0,
+        "records": 0
+      },
+      {
+        "ticker": "MSFT",
+        "coverage": 0.0,
+        "records": 0
+      }
+    ],
+    "largest_cache": [
+      {
+        "ticker": "AAPL",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "SPY",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "QQQ",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "VTI",
+        "records": 0,
+        "coverage": 0.0
+      },
+      {
+        "ticker": "MSFT",
+        "records": 0,
+        "coverage": 0.0
+      }
+    ],
+    "all_stats": [
+      {
+        "ticker": "AAPL",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "SPY",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "QQQ",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "VTI",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "MSFT",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "GOOGL",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "TSLA",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "NVDA",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "META",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "AMZN",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "BRK-B",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "V",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "JNJ",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "WMT",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "JPM",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "XOM",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "UNH",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "HD",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "PG",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      },
+      {
+        "ticker": "DIS",
+        "total_records": 0,
+        "coverage_percentage": 0.0,
+        "first_date": null,
+        "last_date": null,
+        "freshness_status": "Unknown"
+      }
+    ]
+  },
+  "cache_improvements": [
+    {
+      "ticker": "SPY",
+      "first_time": 0.002193927764892578,
+      "second_time": 0.007253885269165039,
+      "speedup": 0.3024486442070666,
+      "cache_hit_rate": 0,
+      "cached_records": 0,
+      "api_records": 0
+    },
+    {
+      "ticker": "AAPL",
+      "first_time": 0.0036478042602539062,
+      "second_time": 0.0030918121337890625,
+      "speedup": 1.1798272671190624,
+      "cache_hit_rate": 0,
+      "cached_records": 0,
+      "api_records": 0
+    },
+    {
+      "ticker": "QQQ",
+      "first_time": 0.0026230812072753906,
+      "second_time": 0.007818937301635742,
+      "speedup": 0.33547796920262235,
+      "cache_hit_rate": 0,
+      "cached_records": 0,
+      "api_records": 0
+    }
+  ],
+  "detailed_results": [
+    {
+      "ticker": "SPY",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0017762184143066406,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "QQQ",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.002080202102661133,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "VTI",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.003741025924682617,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "IWM",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0034799575805664062,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "VEA",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0047779083251953125,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "EFA",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005553007125854492,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "VWO",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0034520626068115234,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "AGG",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.003339052200317383,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "HYG",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005063056945800781,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "LQD",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005808115005493164,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "GLD",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004028797149658203,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "SLV",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0040891170501708984,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "USO",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0045092105865478516,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLF",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.007970094680786133,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLE",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0064771175384521484,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLK",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.007048845291137695,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLI",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004797935485839844,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLV",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.00608515739440918,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLU",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004960060119628906,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XLP",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.00471186637878418,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "AAPL",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004511117935180664,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "MSFT",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004254817962646484,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "GOOGL",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005115032196044922,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "AMZN",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004867076873779297,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "TSLA",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004584074020385742,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "META",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005957841873168945,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "NFLX",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0055789947509765625,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "NVDA",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0069429874420166016,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "CRM",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.003957033157348633,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "ORCL",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.003709077835083008,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "JNJ",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0031380653381347656,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "V",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.003944873809814453,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "BRK-B",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004784107208251953,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "JPM",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005724906921386719,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "XOM",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004976749420166016,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "WMT",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.006874799728393555,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "UNH",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.009048223495483398,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "PG",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.007865190505981445,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "HD",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0085601806640625,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "DIS",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005467891693115234,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "BAC",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0053768157958984375,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "MA",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0050618648529052734,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "ABBV",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.008919954299926758,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "KO",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.00789499282836914,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "PFE",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.007601022720336914,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "NKE",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.004688739776611328,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "TMO",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.006030082702636719,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "COST",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.006165027618408203,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "MRK",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.005317211151123047,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    },
+    {
+      "ticker": "LLY",
+      "success": true,
+      "data_points": 2,
+      "execution_time": 0.0054090023040771484,
+      "cached_records": 0,
+      "api_records": 0,
+      "cache_hit_rate": 0,
+      "api_calls_made": 1,
+      "source_used": "Unknown"
+    }
+  ]
+}

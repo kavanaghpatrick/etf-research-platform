@@ -1,0 +1,178 @@
+# Alerting Rules for ETF Research Platform
+# These rules define when alerts should be triggered based on metrics
+
+groups:
+  - name: application_health
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(client_error[5m])) / sum(rate(page_view[5m]))) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          team: frontend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% (threshold: 5%)"
+          runbook_url: "https://docs.etf-research.com/runbooks/high-error-rate"
+
+      # API response time
+      - alert: SlowAPIResponse
+        expr: |
+          histogram_quantile(0.95, rate(api_response_time_bucket[5m])) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Slow API responses detected"
+          description: "95th percentile API response time is {{ $value }}ms"
+
+      # Memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (server_memory_heap_used / server_memory_heap_total) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}%"
+
+      # Container health
+      - alert: ContainerDown
+        expr: up{job="etf-frontend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: frontend
+        annotations:
+          summary: "Frontend container is down"
+          description: "The frontend container has been down for more than 1 minute"
+
+  - name: performance
+    interval: 60s
+    rules:
+      # Slow page load
+      - alert: SlowPageLoad
+        expr: |
+          histogram_quantile(0.95, rate(page_load_time_bucket[10m])) > 3000
+        for: 15m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Slow page load times"
+          description: "95th percentile page load time is {{ $value }}ms"
+
+      # Poor Web Vitals
+      - alert: PoorLCP
+        expr: |
+          histogram_quantile(0.75, rate(web_vitals_lcp_bucket[10m])) > 2500
+        for: 10m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Poor Largest Contentful Paint (LCP)"
+          description: "75th percentile LCP is {{ $value }}ms (good: <2500ms)"
+
+      - alert: HighCLS
+        expr: |
+          avg(web_vitals_cls) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "High Cumulative Layout Shift (CLS)"
+          description: "Average CLS is {{ $value }} (good: <0.1)"
+
+  - name: availability
+    interval: 30s
+    rules:
+      # Health check failures
+      - alert: HealthCheckFailing
+        expr: |
+          probe_success{job="blackbox", instance="https://etf-research.com/api/health"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          team: frontend
+        annotations:
+          summary: "Health check is failing"
+          description: "Health check endpoint has been failing for 3 minutes"
+
+      # SSL certificate expiry
+      - alert: SSLCertificateExpiringSoon
+        expr: |
+          probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 1h
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate expires in {{ $value | humanizeDuration }}"
+
+  - name: traffic
+    interval: 60s
+    rules:
+      # Traffic spike
+      - alert: TrafficSpike
+        expr: |
+          rate(nginx_requests_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Traffic spike detected"
+          description: "Request rate is {{ $value }} req/s"
+
+      # High rate limiting
+      - alert: HighRateLimiting
+        expr: |
+          sum(rate(nginx_rate_limited_requests[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "High rate of rate-limited requests"
+          description: "{{ $value }} requests/s are being rate limited"
+
+  - name: business_metrics
+    interval: 5m
+    rules:
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: |
+          (sum(rate(nginx_cache_hits[5m])) / sum(rate(nginx_cache_total[5m]))) * 100 < 80
+        for: 15m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value }}% (expected: >80%)"
+
+      # Error budget burn rate
+      - alert: ErrorBudgetBurnRateHigh
+        expr: |
+          (
+            1 - (
+              sum(rate(successful_requests[1h])) / 
+              sum(rate(total_requests[1h]))
+            )
+          ) > 0.001
+        for: 5m
+        labels:
+          severity: warning
+          team: frontend
+        annotations:
+          summary: "Error budget burn rate is high"
+          description: "Current error rate would exhaust monthly error budget in {{ $value }} hours"

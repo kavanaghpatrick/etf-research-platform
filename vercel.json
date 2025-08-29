@@ -1,0 +1,25 @@
+{
+  "functions": {
+    "api/main.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/main.py"
+    }
+  ],
+  "build": {
+    "env": {
+      "ALPHA_VANTAGE_API_KEY": "@alpha_vantage_api_key",
+      "FINNHUB_API_KEY": "@finnhub_api_key", 
+      "TIINGO_API_KEY": "@tiingo_api_key"
+    }
+  },
+  "env": {
+    "ALPHA_VANTAGE_API_KEY": "@alpha_vantage_api_key",
+    "FINNHUB_API_KEY": "@finnhub_api_key",
+    "TIINGO_API_KEY": "@tiingo_api_key"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "timestamp": "2025-07-13T14:46:17.329157",
+  "total_tests": 16,
+  "passed": 12,
+  "failed": 4,
+  "errors": 0,
+  "success_rate": 75.0,
+  "test_results": [
+    {
+      "test": "test_api_availability (__main__.TestCacheArchitecture)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_cache_endpoints_available (__main__.TestCacheArchitecture)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_data_sources_integration (__main__.TestCacheArchitecture)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_cache_efficiency (__main__.TestDataFetching)",
+      "status": "FAIL",
+      "message": "0.011931180953979492 not less than or equal to 0.0034737586975097656 : Second request (0.01s) should not be much slower than first (0.00s)"
+    },
+    {
+      "test": "test_date_range_extension (__main__.TestDataFetching)",
+      "status": "FAIL",
+      "message": "2 not greater than 2"
+    },
+    {
+      "test": "test_multiple_tickers_fetch (__main__.TestDataFetching)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_single_ticker_fetch (__main__.TestDataFetching)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_empty_tickers_list (__main__.TestErrorHandling)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_end_date_before_start_date (__main__.TestErrorHandling)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_invalid_date_format (__main__.TestErrorHandling)",
+      "status": "FAIL",
+      "message": "200 not found in [400, 422, 500]"
+    },
+    {
+      "test": "test_invalid_ticker_symbol (__main__.TestErrorHandling)",
+      "status": "FAIL",
+      "message": "1 != 0"
+    },
+    {
+      "test": "test_cache_dashboard (__main__.TestCacheOptimization)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_cache_optimization_analysis (__main__.TestCacheOptimization)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_ticker_cache_stats (__main__.TestCacheOptimization)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_concurrent_request_handling (__main__.TestPerformanceCharacteristics)",
+      "status": "PASS",
+      "message": ""
+    },
+    {
+      "test": "test_response_time_limits (__main__.TestPerformanceCharacteristics)",
+      "status": "PASS",
+      "message": ""
+    }
+  ]
+}

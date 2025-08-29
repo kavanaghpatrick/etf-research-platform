@@ -1,0 +1,443 @@
+{
+  "timestamp": "2025-07-14T15:10:59.123267",
+  "benchmark_results": [
+    {
+      "scenario": "async_1_tickers",
+      "ticker_count": 1,
+      "duration": 0.04677700996398926,
+      "memory_peak": 99.28125,
+      "memory_baseline": 98.484375,
+      "memory_used": 0.796875,
+      "success_rate": 1.0,
+      "avg_response_time": 0.015582005182902018,
+      "p95_response_time": 0.015582005182902018,
+      "p99_response_time": 0.015582005182902018,
+      "throughput": 64.13406932827719,
+      "error_count": 0,
+      "errors": []
+    },
+    {
+      "scenario": "sync_1_tickers",
+      "ticker_count": 1,
+      "duration": 0.008169174194335938,
+      "memory_peak": 100.625,
+      "memory_baseline": 99.28125,
+      "memory_used": 1.34375,
+      "success_rate": 0.0,
+      "avg_response_time": 0,
+      "p95_response_time": 0,
+      "p99_response_time": 0,
+      "throughput": 0.0,
+      "error_count": 3,
+      "errors": [
+        "HTTP 404",
+        "HTTP 404",
+        "HTTP 404"
+      ]
+    },
+    {
+      "scenario": "async_5_tickers",
+      "ticker_count": 5,
+      "duration": 0.2013838291168213,
+      "memory_peak": 103.09375,
+      "memory_baseline": 100.625,
+      "memory_used": 2.46875,
+      "success_rate": 1.0,
+      "avg_response_time": 0.06711578369140625,
+      "p95_response_time": 0.06711578369140625,
+      "p99_response_time": 0.06711578369140625,
+      "throughput": 14.89692600024862,
+      "error_count": 0,
+      "errors": []
+    },
+    {
+      "scenario": "sync_5_tickers",
+      "ticker_count": 5,
+      "duration": 0.005486011505126953,
+      "memory_peak": 103.125,
+      "memory_baseline": 103.09375,
+      "memory_used": 0.03125,
+      "success_rate": 0.0,
+      "avg_response_time": 0,
+      "p95_response_time": 0,
+      "p99_response_time": 0,
+      "throughput": 0.0,
+      "error_count": 3,
+      "errors": [
+        "HTTP 404",
+        "HTTP 404",
+        "HTTP 404"
+      ]
+    },
+    {
+      "scenario": "async_10_tickers",
+      "ticker_count": 10,
+      "duration": 0.36839914321899414,
+      "memory_peak": 106.0625,
+      "memory_baseline": 103.125,
+      "memory_used": 2.9375,
+      "success_rate": 1.0,
+      "avg_response_time": 0.1227869192759196,
+      "p95_response_time": 0.1227869192759196,
+      "p99_response_time": 0.1227869192759196,
+      "throughput": 8.14334141438721,
+      "error_count": 0,
+      "errors": []
+    },
+    {
+      "scenario": "sync_10_tickers",
+      "ticker_count": 10,
+      "duration": 0.005133152008056641,
+      "memory_peak": 106.0625,
+      "memory_baseline": 106.0625,
+      "memory_used": 0.0,
+      "success_rate": 0.0,
+      "avg_response_time": 0,
+      "p95_response_time": 0,
+      "p99_response_time": 0,
+      "throughput": 0.0,
+      "error_count": 3,
+      "errors": [
+        "HTTP 404",
+        "HTTP 404",
+        "HTTP 404"
+      ]
+    },
+    {
+      "scenario": "async_20_tickers",
+      "ticker_count": 20,
+      "duration": 0.6573429107666016,
+      "memory_peak": 108.171875,
+      "memory_baseline": 105.828125,
+      "memory_used": 2.34375,
+      "success_rate": 1.0,
+      "avg_response_time": 0.21909713745117188,
+      "p95_response_time": 0.21909713745117188,
+      "p99_response_time": 0.21909713745117188,
+      "throughput": 4.5638280277509375,
+      "error_count": 0,
+      "errors": []
+    },
+    {
+      "scenario": "sync_20_tickers",
+      "ticker_count": 20,
+      "duration": 0.005644798278808594,
+      "memory_peak": 108.28125,
+      "memory_baseline": 108.171875,
+      "memory_used": 0.109375,
+      "success_rate": 0.0,
+      "avg_response_time": 0,
+      "p95_response_time": 0,
+      "p99_response_time": 0,
+      "throughput": 0.0,
+      "error_count": 3,
+      "errors": [
+        "HTTP 404",
+        "HTTP 404",
+        "HTTP 404"
+      ]
+    },
+    {
+      "scenario": "concurrent_10_users",
+      "ticker_count": 3,
+      "duration": 1.0787220001220703,
+      "memory_peak": 108.828125,
+      "memory_baseline": 108.265625,
+      "memory_used": 0.5625,
+      "success_rate": 1.0,
+      "avg_response_time": 0.33108490308125815,
+      "p95_response_time": 0.4259815692901611,
+      "p99_response_time": 0.33108490308125815,
+      "throughput": 27.810687087688155,
+      "error_count": 0,
+      "errors": []
+    },
+    {
+      "scenario": "streaming_10_tickers",
+      "ticker_count": 10,
+      "duration": 0.0017168521881103516,
+      "memory_peak": 108.84375,
+      "memory_baseline": 108.828125,
+      "memory_used": 0.015625,
+      "success_rate": 0.0,
+      "avg_response_time": 0,
+      "p95_response_time": 0.0017168521881103516,
+      "p99_response_time": 0.0017168521881103516,
+      "throughput": 0.0,
+      "error_count": 1,
+      "errors": [
+        "HTTP 404"
+      ]
+    }
+  ],
+  "memory_analysis": {
+    "baseline_memory": 108.84375,
+    "peak_memory": 108.84375,
+    "avg_memory": 108.84375,
+    "memory_growth": 0.0,
+    "measurements": [
+      {
+        "timestamp": 1752502253.194079,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.29515,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.396214,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.4972742,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.598351,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.699491,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.800598,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502253.90169,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.002837,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.103992,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.2050738,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.306138,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.407317,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.508669,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.609802,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.7105012,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.811619,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502254.9129999,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.013688,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.114832,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.215911,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.316999,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.4180758,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.519221,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.620338,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.721418,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.822492,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502255.9235651,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.0247,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.125754,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.226819,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.3279722,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.428834,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.529967,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.6310642,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.7321332,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.833482,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502256.934592,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.035668,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.136802,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.238188,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.339046,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.4401228,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.541267,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.642089,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.7431538,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.8442922,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502257.9453928,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.046462,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.147545,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.248717,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.349886,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.4508789,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.552017,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.652661,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.753885,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.85537,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502258.956424,
+        "memory_mb": 108.84375
+      },
+      {
+        "timestamp": 1752502259.057504,
+        "memory_mb": 108.84375
+      }
+    ]
+  },
+  "performance_summary": {
+    "async_performance": {
+      "avg_response_time": 0.10614546140034993,
+      "avg_throughput": 22.93454119266599,
+      "avg_success_rate": 1.0,
+      "avg_memory_usage": 2.13671875
+    },
+    "sync_performance": {
+      "avg_response_time": 0,
+      "avg_throughput": 0.0,
+      "avg_success_rate": 0.0,
+      "avg_memory_usage": 0.37109375
+    },
+    "performance_improvement": {
+      "response_time_improvement": 0,
+      "throughput_improvement": 0
+    }
+  },
+  "recommendations": [
+    "Improve error handling for 5 scenarios with low success rates",
+    "Implement connection pooling for database connections",
+    "Add response caching with stale-while-revalidate strategy",
+    "Consider using edge functions for lightweight operations",
+    "Monitor function cold starts and implement warming strategies",
+    "Set up proper timeout handling for Vercel's 10-second limit"
+  ]
+}

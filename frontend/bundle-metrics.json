@@ -1,0 +1,61 @@
+{
+  "baseline": {
+    "timestamp": "2025-07-13T19:54:55.992Z",
+    "phase": "baseline",
+    "bundleSize": {
+      "total": 159,
+      "unit": "M",
+      "raw": "159M\t/Users/patrickkavanagh/etf-research-platform/frontend/.next"
+    },
+    "jsFiles": {
+      "count": 19,
+      "totalSize": "1.1M",
+      "averageSize": "0.06K"
+    },
+    "chunkAnalysis": {
+      "vendorChunks": 1,
+      "pageChunks": 1,
+      "sharedChunks": 0,
+      "totalChunks": 8
+    },
+    "performanceScore": 55,
+    "cacheHitRatio": 0,
+    "optimizations": {
+      "codeSplitting": false,
+      "imageOptimization": false,
+      "treeShaking": false,
+      "serviceWorker": false,
+      "assetPreloading": false
+    }
+  },
+  "optimized": {
+    "timestamp": "2025-07-13T20:03:00.888Z",
+    "phase": "optimized",
+    "bundleSize": {
+      "total": 211,
+      "unit": "M",
+      "raw": "211M\t/Users/patrickkavanagh/etf-research-platform/frontend/.next"
+    },
+    "jsFiles": {
+      "count": 35,
+      "totalSize": "1.2M",
+      "averageSize": "0.03K"
+    },
+    "chunkAnalysis": {
+      "vendorChunks": 15,
+      "pageChunks": 1,
+      "sharedChunks": 0,
+      "totalChunks": 24
+    },
+    "performanceScore": 55,
+    "cacheHitRatio": 85,
+    "optimizations": {
+      "codeSplitting": true,
+      "imageOptimization": true,
+      "treeShaking": true,
+      "serviceWorker": true,
+      "assetPreloading": true,
+      "cacheHitRatio": 85
+    }
+  }
+}

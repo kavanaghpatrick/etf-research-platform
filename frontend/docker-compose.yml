@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - API_BASE_URL=${API_BASE_URL}
+        - NEXT_PUBLIC_ENV=${NEXT_PUBLIC_ENV:-production}
+        - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
+        - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+        - SENTRY_ORG=${SENTRY_ORG}
+        - SENTRY_PROJECT=${SENTRY_PROJECT}
+    image: etf-research-frontend:latest
+    container_name: etf-research-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_BASE_URL=${API_BASE_URL}
+      - API_TIMEOUT=${API_TIMEOUT:-30000}
+      - API_CACHE_DURATION=${API_CACHE_DURATION:-600000}
+      - API_MAX_RETRIES=${API_MAX_RETRIES:-3}
+      - API_DEBOUNCE_DELAY=${API_DEBOUNCE_DELAY:-300}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - etf-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: etf-research-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/cache:/var/cache/nginx
+    depends_on:
+      - frontend
+    restart: unless-stopped
+    networks:
+      - etf-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: etf-research-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - etf-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  etf-network:
+    driver: bridge
+
+volumes:
+  redis_data:

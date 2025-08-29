@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF Platform Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2563eb; text-align: center; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #dcfce7; border: 1px solid #16a34a; color: #166534; }
+        .error { background: #fef2f2; border: 1px solid #dc2626; color: #991b1b; }
+        .loading { background: #f0f9ff; border: 1px solid #0284c7; color: #0c4a6e; }
+        input, button { padding: 10px; margin: 5px; border: 1px solid #d1d5db; border-radius: 5px; }
+        button { background: #2563eb; color: white; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        .results { margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 5px; border: 1px solid #e5e7eb; }
+        pre { background: #1f2937; color: #f9fafb; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 ETF Research Platform - Integration Test</h1>
+        
+        <div>
+            <h3>Test Data Fetch API</h3>
+            <input type="text" id="tickers" placeholder="Enter tickers (e.g., AAPL,SPY,QQQ)" value="AAPL,SPY,QQQ">
+            <input type="date" id="startDate" value="2024-01-01">
+            <input type="date" id="endDate" value="2024-01-31">
+            <button onclick="testAPI()">Fetch Data</button>
+        </div>
+
+        <div id="status"></div>
+        <div id="results"></div>
+
+        <div style="margin-top: 30px;">
+            <h3>Quick Tests</h3>
+            <button onclick="testHealth()">Test Health</button>
+            <button onclick="testDataHealth()">Test Data Sources</button>
+            <button onclick="testRoot()">Test Root</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        function setStatus(message, type = 'loading') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+        
+        function setResults(data) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <h4>Response:</h4>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+        
+        async function testAPI() {
+            const tickers = document.getElementById('tickers').value.split(',').map(t => t.trim());
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            setStatus('🔄 Fetching ticker data...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/data/fetch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        tickers: tickers,
+                        start_date: startDate,
+                        end_date: endDate,
+                        force_refresh: false,
+                        max_workers: 3
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                setStatus(`✅ Success! Fetched data for ${data.metadata.successful_tickers} tickers in ${data.execution_time.toFixed(3)}s`, 'success');
+                setResults(data);
+                
+            } catch (error) {
+                setStatus(`❌ Error: ${error.message}`, 'error');
+                setResults({error: error.message});
+            }
+        }
+        
+        async function testHealth() {
+            setStatus('🔄 Testing health endpoint...', 'loading');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                setStatus(`✅ Health check passed - Service: ${data.service}`, 'success');
+                setResults(data);
+            } catch (error) {
+                setStatus(`❌ Health check failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testDataHealth() {
+            setStatus('🔄 Testing data source health...', 'loading');
+            try {
+                const response = await fetch(`${API_BASE}/data/health`);
+                const data = await response.json();
+                setStatus(`✅ Data sources: ${data.healthy_sources}/${data.total_sources} healthy`, 'success');
+                setResults(data);
+            } catch (error) {
+                setStatus(`❌ Data health check failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testRoot() {
+            setStatus('🔄 Testing root endpoint...', 'loading');
+            try {
+                const response = await fetch(`${API_BASE}/`);
+                const data = await response.json();
+                setStatus(`✅ Root endpoint working - Status: ${data.status}`, 'success');
+                setResults(data);
+            } catch (error) {
+                setStatus(`❌ Root test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-test on page load
+        window.onload = () => {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+{
+  "timestamp": "2025-07-13T20:03:18.722Z",
+  "budget": {
+    "bundles": {
+      "main": 250,
+      "vendors": 500,
+      "charts": 200,
+      "react": 150,
+      "common": 100,
+      "total": 1000
+    },
+    "assets": {
+      "images": 2000,
+      "fonts": 500,
+      "css": 100
+    },
+    "performance": {
+      "firstContentfulPaint": 2000,
+      "largestContentfulPaint": 4000,
+      "cumulativeLayoutShift": 0.1,
+      "firstInputDelay": 100,
+      "totalBlockingTime": 300
+    },
+    "limits": {
+      "maxChunks": 50,
+      "maxAssets": 200,
+      "maxDependencies": 100
+    }
+  },
+  "results": {
+    "bundleSizes": {
+      "main": 1,
+      "vendors": 651,
+      "charts": 85,
+      "react": 176,
+      "common": 0,
+      "other": 178,
+      "total": 1091
+    },
+    "assetSizes": {
+      "images": 3,
+      "fonts": 0,
+      "css": 41
+    },
+    "counts": {
+      "chunks": 24,
+      "assets": 42
+    }
+  },
+  "violations": [
+    {
+      "message": "Bundle size violation: vendors is 651KB (limit: 500KB)",
+      "type": "bundle-size",
+      "data": {
+        "type": "vendors",
+        "actual": 651,
+        "budget": 500
+      },
+      "timestamp": "2025-07-13T20:03:18.720Z"
+    },
+    {
+      "message": "Bundle size violation: react is 176KB (limit: 150KB)",
+      "type": "bundle-size",
+      "data": {
+        "type": "react",
+        "actual": 176,
+        "budget": 150
+      },
+      "timestamp": "2025-07-13T20:03:18.720Z"
+    },
+    {
+      "message": "Bundle size violation: total is 1091KB (limit: 1000KB)",
+      "type": "bundle-size",
+      "data": {
+        "type": "total",
+        "actual": 1091,
+        "budget": 1000
+      },
+      "timestamp": "2025-07-13T20:03:18.720Z"
+    }
+  ],
+  "warnings": [],
+  "passed": false,
+  "score": 75
+}

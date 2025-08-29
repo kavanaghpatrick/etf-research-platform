@@ -1,0 +1,18 @@
+# Database dependencies for ETF Research Platform Cache System
+
+# PostgreSQL adapter
+psycopg2-binary>=2.9.0
+
+# Database utilities
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+
+# Data processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Performance monitoring
+pg-activity>=3.4.0
+
+# Optional: TimescaleDB toolkit (if using managed TimescaleDB)
+# timescaledb-toolkit>=1.0.0
