@@ -21,6 +21,13 @@ from service_dependencies import get_data_fetcher_optional, get_monte_carlo_engi
 configure_logging(log_level='INFO', suppress_expected_errors=True)
 logger = logging.getLogger(__name__)
 
+# Feature flags for experimental features and async mode
+ASYNC_MODE = os.getenv('ASYNC_MODE', 'true').lower() == 'true'
+CONCURRENT_DIVIDENDS = os.getenv('CONCURRENT_DIVIDENDS', 'true').lower() == 'true'
+ENABLE_TIMEOUTS = os.getenv('ENABLE_TIMEOUTS', 'true').lower() == 'true'
+TIMEOUT_SECONDS = float(os.getenv('TIMEOUT_SECONDS', '8.0'))
+MONTE_CARLO_TIMEOUT = float(os.getenv('MONTE_CARLO_TIMEOUT', '30.0'))
+
 # Add the project root and src directory to the path for imports
 project_root = os.path.dirname(os.path.dirname(__file__))
 src_path = os.path.join(project_root, 'src')
@@ -412,12 +419,23 @@ async def run_monte_carlo_simulation(
             ).date()
         )
         
-        # Run simulation
+        # Run simulation with timeout protection
         start_time = time.time()
-        results = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: monte_carlo_engine.run_simulation(config)
-        )
+        try:
+            # Use asyncio.to_thread for better async support
+            # Allow up to 30 seconds for Monte Carlo simulations
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    monte_carlo_engine.run_simulation,
+                    config
+                ),
+                timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Monte Carlo simulation timeout - try reducing the number of simulations"
+            )
         execution_time = time.time() - start_time
         
         # Format response - include percentile paths for visualization
@@ -630,8 +648,49 @@ async def health_check():
         "service": "ETF Research Platform API"
     }
 
+async def fetch_dividend_data_async(ticker: str, start_dt: date, end_dt: date, total_return_calculator_instance) -> Dict[str, Any]:
+    """Async wrapper for fetching dividend data with timeout protection."""
+    try:
+        # Wrap synchronous call with asyncio.to_thread and add timeout
+        dividend_df = await asyncio.wait_for(
+            asyncio.to_thread(
+                total_return_calculator_instance.fetch_and_cache_dividends,
+                ticker,
+                start_dt,
+                end_dt
+            ),
+            timeout=3.0  # 3 second timeout per ticker
+        )
+        
+        if not dividend_df.empty:
+            # Convert to list of dicts
+            dividends = dividend_df.to_dict('records')
+            for div in dividends:
+                if hasattr(div.get('ex_date'), 'isoformat'):
+                    div['ex_date'] = div['ex_date'].isoformat()
+                if hasattr(div.get('payment_date'), 'isoformat'):
+                    div['payment_date'] = div['payment_date'].isoformat()
+            
+            return {
+                'dividends': dividends,
+                'total_dividends': float(dividend_df['dividend_amount'].sum()),
+                'dividend_count': len(dividends)
+            }
+        else:
+            return {
+                'dividends': [],
+                'total_dividends': 0.0,
+                'dividend_count': 0
+            }
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout fetching dividends for {ticker}")
+        raise
+    except Exception as e:
+        logger.warning(f"Failed to fetch dividends for {ticker}: {e}")
+        raise
+
 async def fetch_real_data(tickers: List[str], start_date: str, end_date: Optional[str], data_fetcher_instance) -> Dict[str, Any]:
-    """Fetch real data using our cached data fetcher."""
+    """Fetch real data using our cached data fetcher with timeout protection."""
     if not data_fetcher_instance:
         raise HTTPException(
             status_code=503,
@@ -642,13 +701,35 @@ async def fetch_real_data(tickers: List[str], start_date: str, end_date: Optiona
     start_dt = datetime.strptime(start_date, '%Y-%m-%d')
     end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else datetime.now()
     
-    # Fetch data for all tickers
-    results = await asyncio.get_event_loop().run_in_executor(
-        None, 
-        lambda: data_fetcher_instance.fetch_multiple_tickers(tickers, start_dt, end_dt)
-    )
-    
-    return results
+    # Fetch data for all tickers with timeout protection
+    # Use asyncio.to_thread for better async support (Python 3.9+)
+    if ENABLE_TIMEOUTS:
+        try:
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    data_fetcher_instance.fetch_multiple_tickers,
+                    tickers,
+                    start_dt,
+                    end_dt
+                ),
+                timeout=TIMEOUT_SECONDS
+            )
+            return results
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout fetching data for {len(tickers)} tickers")
+            raise HTTPException(
+                status_code=504,
+                detail="Request timeout - try fetching fewer tickers or a smaller date range"
+            )
+    else:
+        # No timeout protection (legacy mode)
+        results = await asyncio.to_thread(
+            data_fetcher_instance.fetch_multiple_tickers,
+            tickers,
+            start_dt,
+            end_dt
+        )
+        return results
 
 @app.post("/data/fetch")
 async def fetch_ticker_data(
@@ -674,40 +755,54 @@ async def fetch_ticker_data(
                 start_dt = datetime.strptime(request.start_date, '%Y-%m-%d').date()
                 end_dt = datetime.strptime(request.end_date, '%Y-%m-%d').date() if request.end_date else date.today()
                 
-                for ticker in request.tickers:
+                if CONCURRENT_DIVIDENDS:
+                    # Process dividends concurrently for all tickers
+                    dividend_tasks = []
+                    for ticker in request.tickers:
+                        task = asyncio.create_task(
+                            fetch_dividend_data_async(ticker.upper(), start_dt, end_dt, total_return_calculator_instance)
+                        )
+                        dividend_tasks.append((ticker.upper(), task))
+                    
+                    # Wait for all dividend fetches with timeout
                     try:
-                        # Fetch dividend data - process sequentially to avoid SQLite concurrency issues
-                        dividend_df = total_return_calculator_instance.fetch_and_cache_dividends(
-                            ticker.upper(),
-                            start_dt,
-                            end_dt
+                        done_tasks = await asyncio.wait_for(
+                            asyncio.gather(*[task for _, task in dividend_tasks], return_exceptions=True),
+                            timeout=5.0  # 5 second timeout for all dividend fetching
                         )
                         
-                        if not dividend_df.empty:
-                            # Convert to list of dicts
-                            dividends = dividend_df.to_dict('records')
-                            for div in dividends:
-                                if hasattr(div.get('ex_date'), 'isoformat'):
-                                    div['ex_date'] = div['ex_date'].isoformat()
-                                if hasattr(div.get('payment_date'), 'isoformat'):
-                                    div['payment_date'] = div['payment_date'].isoformat()
-                            
-                            dividend_data[ticker.upper()] = {
-                                'dividends': dividends,
-                                'total_dividends': float(dividend_df['dividend_amount'].sum()),
-                                'dividend_count': len(dividends)
-                            }
-                        else:
-                            dividend_data[ticker.upper()] = {
-                                'dividends': [],
-                                'total_dividends': 0.0,
-                                'dividend_count': 0
-                            }
-                    except Exception as e:
-                        logging.warning(f"Failed to fetch dividends for {ticker}: {e}")
-                        dividend_data[ticker.upper()] = {'error': str(e)}
+                        for (ticker, _), result in zip(dividend_tasks, done_tasks):
+                            if isinstance(result, Exception):
+                                logger.warning(f"Failed to fetch dividends for {ticker}: {result}")
+                                dividend_data[ticker] = {'error': str(result)}
+                            else:
+                                dividend_data[ticker] = result
+                                
+                    except asyncio.TimeoutError:
+                        logger.warning("Dividend fetching timed out - returning partial results")
+                        # Collect whatever results we have
+                        for ticker, task in dividend_tasks:
+                            if task.done() and not task.cancelled():
+                                try:
+                                    dividend_data[ticker] = task.result()
+                                except Exception as e:
+                                    dividend_data[ticker] = {'error': str(e)}
+                            else:
+                                dividend_data[ticker] = {'error': 'Timeout'}
+                else:
+                    # Sequential processing (legacy mode for SQLite compatibility)
+                    for ticker in request.tickers:
+                        try:
+                            result = await fetch_dividend_data_async(
+                                ticker.upper(), start_dt, end_dt, total_return_calculator_instance
+                            )
+                            dividend_data[ticker.upper()] = result
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch dividends for {ticker}: {e}")
+                            dividend_data[ticker.upper()] = {'error': str(e)}
+                    
             except Exception as e:
-                logging.error(f"Failed to fetch dividend data: {e}")
+                logger.error(f"Failed to fetch dividend data: {e}")
         
         execution_time = (datetime.now() - start_time).total_seconds()
         
@@ -920,14 +1015,22 @@ async def get_dividend_history(ticker: str, years: int = 5):
             # Handle leap year edge case (Feb 29 -> Feb 28)
             start_date = end_date.replace(year=end_date.year - years, day=28)
         
-        # Fetch dividend data
-        dividend_df = await asyncio.get_event_loop().run_in_executor(
-            None,
-            total_return_calculator.fetch_and_cache_dividends,
-            ticker.upper(),
-            start_date,
-            end_date
-        )
+        # Fetch dividend data with timeout protection
+        try:
+            dividend_df = await asyncio.wait_for(
+                asyncio.to_thread(
+                    total_return_calculator.fetch_and_cache_dividends,
+                    ticker.upper(),
+                    start_date,
+                    end_date
+                ),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Timeout fetching dividend history"
+            )
         
         execution_time = (datetime.now() - start_time).total_seconds()
         
@@ -980,25 +1083,35 @@ async def get_total_returns(ticker: str, start_date: str, end_date: str, include
     try:
         start_time = datetime.now()
         
-        # Calculate returns
-        if include_reinvestment:
-            metrics = await asyncio.get_event_loop().run_in_executor(
-                None,
-                total_return_calculator.calculate_dividend_reinvested_return,
-                ticker.upper(),
-                start_date,
-                end_date
+        # Calculate returns with timeout protection
+        try:
+            if include_reinvestment:
+                metrics = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        total_return_calculator.calculate_dividend_reinvested_return,
+                        ticker.upper(),
+                        start_date,
+                        end_date
+                    ),
+                    timeout=8.0
+                )
+                calculation_type = "dividend_reinvested"
+            else:
+                metrics = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        total_return_calculator.calculate_simple_total_return,
+                        ticker.upper(),
+                        start_date,
+                        end_date
+                    ),
+                    timeout=8.0
+                )
+                calculation_type = "simple_total_return"
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Timeout calculating returns"
             )
-            calculation_type = "dividend_reinvested"
-        else:
-            metrics = await asyncio.get_event_loop().run_in_executor(
-                None,
-                total_return_calculator.calculate_simple_total_return,
-                ticker.upper(),
-                start_date,
-                end_date
-            )
-            calculation_type = "simple_total_return"
         
         execution_time = (datetime.now() - start_time).total_seconds()
         
@@ -1039,26 +1152,36 @@ async def calculate_custom_returns(request: TotalReturnRequest):
     try:
         start_time = datetime.now()
         
-        # Calculate returns
-        if request.include_reinvestment:
-            metrics = await asyncio.get_event_loop().run_in_executor(
-                None,
-                total_return_calculator.calculate_dividend_reinvested_return,
-                request.ticker.upper(),
-                request.start_date,
-                request.end_date,
-                request.initial_investment
+        # Calculate returns with timeout protection
+        try:
+            if request.include_reinvestment:
+                metrics = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        total_return_calculator.calculate_dividend_reinvested_return,
+                        request.ticker.upper(),
+                        request.start_date,
+                        request.end_date,
+                        request.initial_investment
+                    ),
+                    timeout=8.0
+                )
+                calculation_type = "dividend_reinvested"
+            else:
+                metrics = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        total_return_calculator.calculate_simple_total_return,
+                        request.ticker.upper(),
+                        request.start_date,
+                        request.end_date
+                    ),
+                    timeout=8.0
+                )
+                calculation_type = "simple_total_return"
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Timeout calculating custom returns"
             )
-            calculation_type = "dividend_reinvested"
-        else:
-            metrics = await asyncio.get_event_loop().run_in_executor(
-                None,
-                total_return_calculator.calculate_simple_total_return,
-                request.ticker.upper(),
-                request.start_date,
-                request.end_date
-            )
-            calculation_type = "simple_total_return"
         
         execution_time = (datetime.now() - start_time).total_seconds()
         

@@ -1,5 +1,49 @@
 # CLAUDE.md - ETF Research Platform Development Guide
 
+## 🧘 SIMPLICITY FIRST - THE PRIME DIRECTIVE
+
+### When facing ANY problem, ALWAYS ask in this order:
+1. **"What can I DELETE to fix this?"** - Remove the cause, not add a bandaid
+2. **"What existing code already does this?"** - Reuse before creating
+3. **"Can I fix this by changing 1 line?"** - Smallest change that works
+4. **"Is the problem a missing simple thing?"** - Often it's a typo or wrong parameter
+
+### The Most Impactful Rule:
+**"Every bug is an opportunity to DELETE code, not add it."**
+
+When encountering an issue, the instinct should be:
+- First, look for what unnecessary code is CAUSING the problem
+- Second, find what ALREADY EXISTS that solves it
+- Last resort, add the MINIMUM new code possible
+
+### Real Examples from This Project:
+```
+❌ BAD: Cache complexity → Add more tables, migration system, optimization hints
+✅ GOOD: Cache complexity → Single table, basic CRUD operations (75% code reduction)
+
+❌ BAD: Duplicate main.py files → Complex merge strategy with feature flags
+✅ GOOD: Duplicate main.py → Keep one, add timeout protection (simple consolidation)
+
+❌ BAD: Bundle too large → Add complex optimization pipeline
+✅ GOOD: Bundle too large → Lazy load heavy libraries, remove unused dependencies
+```
+
+### Red Flags That We're Over-Engineering:
+- Adding "just in case" error handling
+- Creating new state variables to track things
+- Writing coordination logic between components
+- Adding queues, flags, or timers to "fix" race conditions
+- The fix is longer than 10 lines
+- Multiple abstraction layers for single implementations
+- Configuration systems for hardcoded values
+
+### The Simplicity Test:
+Before implementing ANY fix, MUST answer:
+1. **What existing code am I NOT using that could solve this?**
+2. **What can I DELETE instead of adding?**
+3. **Can I explain this fix in one sentence?**
+4. **Will this fix create new edge cases?** (If yes, find simpler approach)
+
 ## Project Overview
 
 The ETF Research Platform is a comprehensive financial analysis application that provides professional-grade tools for researching ETFs and stocks. It features real-time data fetching, advanced portfolio analytics, dividend tracking, and interactive visualizations.
@@ -122,7 +166,37 @@ The platform uses a sophisticated caching system to minimize API calls:
    - Performance metrics
    - Data source health
 
-## Development Workflow
+## 🚀 DEVELOPMENT WORKFLOW (CRITICAL - FOLLOW EXACTLY)
+
+### Complete Development Process:
+```
+1. Research → Understand the problem deeply using parallel Task agents
+2. Plan → Create detailed implementation plan with clear phases
+3. Branch → Create feature branch for changes
+4. Implement → Make changes following simplicity principles
+5. Test → Verify all functionality works
+6. Document → Update relevant documentation
+7. Commit → Clear commit messages explaining "why" not just "what"
+8. Review → Get code review if needed
+9. Merge → Create PR when ready
+```
+
+### 🎯 Simplicity Filter for External Feedback:
+When receiving suggestions from code reviews or AI tools:
+
+**✅ ACCEPT feedback that:**
+- Fixes bugs, security vulnerabilities, or crashes
+- Prevents common failure cases with minimal code
+- Adds essential missing functionality
+- Improves UX with simple changes
+
+**❌ REJECT feedback that:**
+- Adds "nice to have" features not in scope
+- Suggests enterprise patterns for our use case
+- Introduces abstraction "for future flexibility"
+- Adds complex error handling for rare edge cases
+- Suggests performance optimization before problems exist
+- Recommends additional complexity without clear benefit
 
 ### Working with Claude & AI Agents
 
@@ -131,6 +205,38 @@ The platform uses a sophisticated caching system to minimize API calls:
 ⏺ You're right! I should be launching all 5 tasks in a single message with multiple tool invocations. Let me do that now:
 ```
 This allows agents to work in parallel, significantly reducing completion time for complex multi-part tasks.
+
+### GitHub Issue Management
+
+#### Creating Issues:
+```bash
+gh issue create --title "Title" --body "Description" --label "enhancement"
+```
+
+#### Issue Lifecycle:
+1. **Created → In Progress**: When starting work
+2. **In Progress → Review**: When implementation complete
+3. **Review → Closed**: When ALL criteria met and tested
+
+#### NEVER close issues when:
+- Code is written but not tested
+- Tests are failing
+- Implementation is partial
+- There are known bugs
+- Code isn't committed
+
+### The 5-Line Implementation Test:
+Can the core functionality be expressed simply?
+```python
+# Good: Core ETF data fetch in 5 lines
+data = await fetch_from_cache(ticker, start, end)
+if gaps := find_missing_ranges(data, start, end):
+    fresh_data = await fetch_from_source(ticker, gaps)
+    await cache_data(ticker, fresh_data)
+return combine_data(data, fresh_data)
+```
+
+If it takes more than this to explain the core logic, it's probably over-engineered.
 
 ### Local Setup
 
@@ -332,6 +438,27 @@ cd frontend && npm run perf:report
 npm run build:analyze
 ```
 
+## 🎯 Project Priorities & Scope Boundaries
+
+### Core Priorities (In Order):
+1. **Data Accuracy**: Correct financial data is non-negotiable
+2. **Performance**: Fast response times for user interactions
+3. **Reliability**: Graceful fallbacks when data sources fail
+4. **Simplicity**: Maintainable code over clever solutions
+
+### Scope Boundaries (DO NOT CROSS):
+- **NO** elaborate sync resumption (just retry if it fails)
+- **NO** vendor abstraction layers until we have 2+ vendors
+- **NO** complex monitoring beyond basic logging
+- **NO** premature optimization for scale we don't have
+- **NO** enterprise features that <80% of users need
+
+### The Priority Question for Every Decision:
+**"Does this help users analyze ETFs better?"**
+- If NO → Don't build it
+- If YES → Build the simplest version that works
+- If MAYBE → Wait until users ask for it
+
 ## Architecture Decisions
 
 See `DECISIONS.md` for detailed architectural decisions including:
@@ -340,3 +467,11 @@ See `DECISIONS.md` for detailed architectural decisions including:
 - Caching architecture
 - Frontend framework choice
 - Deployment platform selection
+
+## Summary of Simplicity Principles
+
+1. **Delete before adding** - Most bugs are caused by too much code
+2. **Reuse before creating** - Check what already exists
+3. **One-line fixes preferred** - Smallest change that works
+4. **Explain in one sentence** - If you can't, it's too complex
+5. **Filter all feedback** - Accept only what prevents failures or adds essential value
