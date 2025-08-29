@@ -11,10 +11,8 @@ from dataclasses import dataclass
 import asyncio
 import time
 
-try:
-    from sqlite_cache_manager import SQLiteStockDataCache as StockDataCache, DateRange
-except ImportError:
-    from cache_manager import StockDataCache, DateRange
+# Use simplified cache manager
+from simple_cache_manager import SimpleCacheManager as StockDataCache, DateRange
 from simple_data_sources import SimpleAlphaVantageSource, SimpleTiingoSource
 from market_calendar_service import get_market_calendar
 
