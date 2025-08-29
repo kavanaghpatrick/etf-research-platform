@@ -1,13 +1,5 @@
 // Production-ready logging utility with structured logging support
 
-// Sentry is optional - will be imported dynamically if available
-let Sentry: any = null;
-try {
-  Sentry = require('@sentry/nextjs');
-} catch {
-  // Sentry not installed yet - that's okay
-}
-
 export enum LogLevel {
   DEBUG = 0,
   INFO = 1,
@@ -102,16 +94,6 @@ class Logger {
     // In production, send to external logging service
     if (this.isProduction) {
       this.sendToLoggingService(logEntry);
-      
-      // Send errors to Sentry if available
-      if (level >= LogLevel.ERROR && error && Sentry) {
-        Sentry.captureException(error, {
-          level: level === LogLevel.FATAL ? 'fatal' : 'error',
-          contexts: {
-            log: context,
-          },
-        });
-      }
     } else {
       // In development, log to console
       this.logToConsole(level, logEntry);

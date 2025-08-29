@@ -1,13 +1,10 @@
 import { MonteCarloResponse, formatLargeNumber, formatPercentage } from '../services/monteCarloApi';
 import { HybridSimulationResults } from '../services/hybridSimulationApi';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+// Type declarations for jsPDF when dynamically imported
+type JsPDFAutoTable = {
+  autoTable: (options: any) => any;
+};
 
 interface ReportOptions {
   results: MonteCarloResponse;
@@ -24,7 +21,14 @@ export async function generatePDFReport({
   portfolio,
   filename
 }: ReportOptions): Promise<void> {
-  const doc = new jsPDF();
+  // Lazy load jsPDF and jspdf-autotable only when PDF generation is needed
+  // This saves ~250KB from the initial bundle
+  const [{ default: jsPDF }, _] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
+
+  const doc = new jsPDF() as any; // Type assertion for autoTable
   let yPosition = 20;
 
   // Title
@@ -93,7 +97,7 @@ export async function generatePDFReport({
     }
   });
 
-  yPosition = (doc as any).lastAutoTable.finalY + 15;
+  yPosition = doc.lastAutoTable.finalY + 15;
 
   // Simulation Results Table
   doc.setFontSize(12);
@@ -138,7 +142,7 @@ export async function generatePDFReport({
     margin: { left: 20, right: 20 }
   });
 
-  yPosition = (doc as any).lastAutoTable.finalY + 15;
+  yPosition = doc.lastAutoTable.finalY + 15;
 
   // Check if we need a new page
   if (yPosition > 250) {
@@ -173,7 +177,7 @@ export async function generatePDFReport({
       }
     });
 
-    yPosition = (doc as any).lastAutoTable.finalY + 15;
+    yPosition = doc.lastAutoTable.finalY + 15;
   }
 
   // Simulation Metadata

@@ -43,16 +43,10 @@ try:
     if YFINANCE_AVAILABLE:
         from yfinance_source import YFinanceSource
     
-    # Try SQLite cache manager first (for local development)
-    try:
-        from sqlite_cache_manager import SQLiteStockDataCache as StockDataCache
-        CACHE_TYPE = "SQLite"
-        logging.info("Using SQLite cache manager for local development")
-    except ImportError:
-        # Fallback to PostgreSQL cache manager
-        from cache_manager import StockDataCache
-        CACHE_TYPE = "PostgreSQL"
-        logging.info("Using PostgreSQL cache manager")
+    # Use simplified cache manager
+    from simple_cache_manager import SimpleCacheManager as StockDataCache
+    CACHE_TYPE = "SimpleSQLite"
+    logging.info("Using simplified SQLite cache manager")
     
     from cached_data_fetcher import CachedDataFetcher
     from total_return_calculator import TotalReturnCalculator
