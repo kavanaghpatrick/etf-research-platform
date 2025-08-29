@@ -72,8 +72,7 @@
     "jspdf-autotable": "^5.0.2",
     "next": "15.3.5",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-window": "^1.8.11"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@axe-core/cli": "^4.10.2",

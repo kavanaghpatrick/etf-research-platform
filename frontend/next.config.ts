@@ -70,7 +70,6 @@ const nextConfig: NextConfig = {
         splitChunks: {
           chunks: 'all',
           minSize: 20000,
-          maxSize: 244000,
           cacheGroups: {
             // React ecosystem
             react: {
@@ -88,23 +87,7 @@ const nextConfig: NextConfig = {
               priority: 30,
               enforce: true,
             },
-            // Testing utilities (separate chunk)
-            testing: {
-              test: /[\/]node_modules[\/](@testing-library|jest|axe|playwright)[\/]/,
-              name: 'testing',
-              chunks: 'all',
-              priority: 25,
-              enforce: true,
-            },
-            // UI libraries
-            ui: {
-              test: /[\/]node_modules[\/](tailwindcss|postcss)[\/]/,
-              name: 'ui',
-              chunks: 'all',
-              priority: 20,
-              enforce: true,
-            },
-            // Vendor libraries
+            // All other vendor libraries
             vendors: {
               test: /[\/]node_modules[\/]/,
               name: 'vendors',

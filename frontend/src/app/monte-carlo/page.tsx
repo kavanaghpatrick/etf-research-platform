@@ -1,18 +1,32 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { ChartBarIcon, PlayIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import PortfolioAllocation from '../../components/PortfolioAllocation';
 import SimulationParameters from '../../components/SimulationParameters';
 import SimulationResults from '../../components/SimulationResults';
 import SimulationMethodSelector, { SimulationMethod } from '../../components/SimulationMethodSelector';
 import AdvancedSettingsPanel, { AdvancedSimulationConfig, defaultAdvancedConfig } from '../../components/AdvancedSettingsPanel';
-import HelpDocumentation from '../../components/HelpDocumentation';
-import PerformanceMonitor from '../../components/PerformanceMonitor';
-import UserFeedbackSystem from '../../components/UserFeedbackSystem';
 import { monteCarloApi, MonteCarloResponse } from '../../services/monteCarloApi';
 import { hybridSimulationApi, HybridSimulationResults, convertToHybridRequest, convertHybridResultsToTraditional } from '../../services/hybridSimulationApi';
 import useEnhancedPolling from '../../hooks/useEnhancedPolling';
+
+// Lazy load non-critical components
+const HelpDocumentation = dynamic(() => import('../../components/HelpDocumentation'), {
+  ssr: false,
+  loading: () => null
+});
+
+const PerformanceMonitor = dynamic(() => import('../../components/PerformanceMonitor'), {
+  ssr: false,
+  loading: () => null
+});
+
+const UserFeedbackSystem = dynamic(() => import('../../components/UserFeedbackSystem'), {
+  ssr: false,
+  loading: () => null
+});
 
 interface PortfolioItem {
   id: string;
