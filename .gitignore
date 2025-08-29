@@ -72,6 +72,7 @@ cache/
 .env
 .env.local
 .env.*.local
+.env.test
 
 # MyPy
 .mypy_cache/
